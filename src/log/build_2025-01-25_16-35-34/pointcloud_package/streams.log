@@ -1,0 +1,37 @@
+[0.616s] Invoking command in '/home/louis/Documents/ros2_projects/pointcloud_grasp/src/pointcloud_package': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/pointcloud_package build --build-base /home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/build install --record /home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/install.log --single-version-externally-managed install_data
+[0.781s] running egg_info
+[0.781s] creating ../build/pointcloud_package/pointcloud_package.egg-info
+[0.793s] writing ../build/pointcloud_package/pointcloud_package.egg-info/PKG-INFO
+[0.793s] writing dependency_links to ../build/pointcloud_package/pointcloud_package.egg-info/dependency_links.txt
+[0.793s] writing entry points to ../build/pointcloud_package/pointcloud_package.egg-info/entry_points.txt
+[0.793s] writing requirements to ../build/pointcloud_package/pointcloud_package.egg-info/requires.txt
+[0.793s] writing top-level names to ../build/pointcloud_package/pointcloud_package.egg-info/top_level.txt
+[0.794s] writing manifest file '../build/pointcloud_package/pointcloud_package.egg-info/SOURCES.txt'
+[0.818s] reading manifest file '../build/pointcloud_package/pointcloud_package.egg-info/SOURCES.txt'
+[0.818s] writing manifest file '../build/pointcloud_package/pointcloud_package.egg-info/SOURCES.txt'
+[0.818s] running build
+[0.818s] running build_py
+[0.818s] creating /home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/build
+[0.818s] creating /home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/build/lib
+[0.819s] creating /home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/build/lib/pointcloud_package
+[0.819s] copying pointcloud_package/__init__.py -> /home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/build/lib/pointcloud_package
+[0.819s] copying pointcloud_package/pc_processor_node.py -> /home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/build/lib/pointcloud_package
+[0.819s] running install
+[0.822s] running install_lib
+[0.834s] creating /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/lib/python3.12/site-packages/pointcloud_package
+[0.834s] copying /home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/build/lib/pointcloud_package/__init__.py -> /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/lib/python3.12/site-packages/pointcloud_package
+[0.834s] copying /home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/build/lib/pointcloud_package/pc_processor_node.py -> /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/lib/python3.12/site-packages/pointcloud_package
+[0.835s] byte-compiling /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/lib/python3.12/site-packages/pointcloud_package/__init__.py to __init__.cpython-312.pyc
+[0.835s] byte-compiling /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/lib/python3.12/site-packages/pointcloud_package/pc_processor_node.py to pc_processor_node.cpython-312.pyc
+[0.835s] running install_data
+[0.835s] creating /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/share/ament_index
+[0.835s] creating /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/share/ament_index/resource_index
+[0.835s] creating /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/share/ament_index/resource_index/packages
+[0.835s] copying resource/pointcloud_package -> /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/share/ament_index/resource_index/packages
+[0.835s] copying package.xml -> /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/share/pointcloud_package
+[0.835s] running install_egg_info
+[0.848s] Copying ../build/pointcloud_package/pointcloud_package.egg-info to /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/lib/python3.12/site-packages/pointcloud_package-0.0.0-py3.12.egg-info
+[0.849s] running install_scripts
+[0.932s] Installing pc_processor_node script to /home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/lib/pointcloud_package
+[0.932s] writing list of installed files to '/home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/install.log'
+[0.945s] Invoked command in '/home/louis/Documents/ros2_projects/pointcloud_grasp/src/pointcloud_package' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/louis/Documents/ros2_projects/pointcloud_grasp/src/install/pointcloud_package/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/pointcloud_package build --build-base /home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/build install --record /home/louis/Documents/ros2_projects/pointcloud_grasp/src/build/pointcloud_package/install.log --single-version-externally-managed install_data
