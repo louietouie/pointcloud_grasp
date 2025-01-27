@@ -25,7 +25,7 @@ class PointcloudToNormalsConverter(Node):
         # self.subscription = self.create_subscription(PointCloud2, '/camera/camera/depth/color/points', self.listener_callback, 10)
         self.subscription = self.create_subscription(Image, '/camera/camera/depth/image_rect_raw', self.listener_callback, 10)
 
-        # self.publisher = self.create_publisher(MarkerArray, 'pointcloud_normals', 10)
+        self.publisher = self.create_publisher(MarkerArray, 'normals', 10)
 
         # self.window_size = 
         # self.stride = 
@@ -41,7 +41,8 @@ class PointcloudToNormalsConverter(Node):
         # plt.show()
 
         np_image = self.image_to_numpy(msg)
-        self.estimate_normals_by_nearest_pixels(np_image, 3, 5)
+        markers = self.create_normal_markers(np_image)
+        self.publisher.publish(markers)
 
 
     # I believe each uint16 represents a distance in mm
@@ -70,9 +71,9 @@ class PointcloudToNormalsConverter(Node):
     #     })
 
 
-    def publish_message(self, pointcloud):
-        msg = self.calculate_normals(pointcloud)
-        self.publisher_.publish(msg)
+    # def publish_message(self, pointcloud):
+    #     msg = self.calculate_normals(pointcloud)
+    #     self.publisher_.publish(msg)
 
     
     # Inspired by MIT Robot Manipulation Chapter 5
@@ -82,7 +83,7 @@ class PointcloudToNormalsConverter(Node):
         num_cols = image.shape[1]
         # marker_array = MarkerArray()
         normals = []
-        min_col, max_col, min_row, max_row = self.bbox(image)
+        min_row, max_row, min_col, max_col  = self.bbox(image)
 
         for col in range(min_col, max_col, stride):
             for row in range(min_row, max_row, stride):
@@ -111,13 +112,15 @@ class PointcloudToNormalsConverter(Node):
 
                 eigen_info = np.linalg.eigh(W)
                 normal = eigen_info.eigenvectors[:,0]
-                normals.append(normal)
+                center_point = (row, col, image[row][col])
+                normals.append((normal, center_point))
 
         # # pointcloud.reshape
         # for pixel in image:
         #     # mark = self.create_marker()
         #     normals.append(normal)
         #     # marker_array.markers.append(mark)
+
         return normals
         
     def bbox(self, np_image):
@@ -126,12 +129,22 @@ class PointcloudToNormalsConverter(Node):
         bottom_left = np.max(mask, 1)
         return (top_right[0], bottom_left[0], top_right[1], bottom_left[1])
 
-    def create_marker():
+    def create_normal_markers(self, image):
+        normals = self.estimate_normals_by_nearest_pixels(image, 3, 5)
+        markers = MarkerArray()
+        id = 0
+        for vector, point in normals:
+            marker = self.create_marker(point, vector, id)
+            markers.markers.append(marker)
+            id+=1
+        return markers
+
+    def create_marker(self, point, vector, id):
         marker = Marker()
-        marker.header.frame_id = '/map'
+        marker.header.frame_id = '/camera_depth_optical_frame'
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.type = marker.SPHERE
-        marker.id = 0
+        marker.id = id
         marker.action = marker.ADD
         marker.scale.x = 0.5
         marker.scale.y = 0.5
@@ -140,9 +153,9 @@ class PointcloudToNormalsConverter(Node):
         marker.color.g = 0.0
         marker.color.b = 0.0
         marker.color.a = 1.0
-        marker.pose.position.x = 0.0
-        marker.pose.position.y = 0.0
-        marker.pose.position.z = 2.0
+        marker.pose.position.x = float(point[0]/ 20)
+        marker.pose.position.y = float(point[1]/ 20)
+        marker.pose.position.z = float(point[2] / 20)
         return marker
 
 
