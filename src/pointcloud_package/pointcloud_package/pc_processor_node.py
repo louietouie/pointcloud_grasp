@@ -4,6 +4,8 @@ from matplotlib import pyplot as plt
 
 from sensor_msgs.msg import PointCloud2, Image
 from visualization_msgs.msg import Marker, MarkerArray
+from scipy.spatial.transform import Rotation
+# from tf2.transformations import quaternion_from_euler
 import numpy as np
 
 TYPE_MAP = {
@@ -130,7 +132,7 @@ class PointcloudToNormalsConverter(Node):
         return (top_right[0], bottom_left[0], top_right[1], bottom_left[1])
 
     def create_normal_markers(self, image):
-        normals = self.estimate_normals_by_nearest_pixels(image, 3, 5)
+        normals = self.estimate_normals_by_nearest_pixels(image, 3, 15)
         markers = MarkerArray()
         id = 0
         for vector, point in normals:
@@ -143,19 +145,28 @@ class PointcloudToNormalsConverter(Node):
         marker = Marker()
         marker.header.frame_id = '/camera_depth_optical_frame'
         marker.header.stamp = self.get_clock().now().to_msg()
-        marker.type = marker.SPHERE
+        marker.type = marker.ARROW
         marker.id = id
         marker.action = marker.ADD
-        marker.scale.x = 0.5
-        marker.scale.y = 0.5
-        marker.scale.z = 0.5
+        marker.scale.x = 2.0
+        marker.scale.y = 0.1
+        marker.scale.z = 0.1
         marker.color.r = 1.0
         marker.color.g = 0.0
         marker.color.b = 0.0
         marker.color.a = 1.0
-        marker.pose.position.x = float(point[0]/ 20)
-        marker.pose.position.y = float(point[1]/ 20)
+        marker.pose.position.x = float(point[1]/ 20)
+        marker.pose.position.y = float(point[0]/ 20)
         marker.pose.position.z = float(point[2] / 20)
+        quaternion = Rotation.align_vectors([[0,1,0]], [vector])[0].as_quat()
+        # quaternion = Rotation.from_euler('xyz', [vector[0], vector[1], vector[2]], degrees = False).as_quat()
+        # print(vector)
+        # print(quaternion)
+        # print(quaternion2)
+        marker.pose.orientation.x = float(quaternion[0])
+        marker.pose.orientation.y = float(quaternion[1])
+        marker.pose.orientation.z = float(quaternion[2])
+        marker.pose.orientation.w = float(quaternion[3])
         return marker
 
 
