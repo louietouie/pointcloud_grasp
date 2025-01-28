@@ -7,6 +7,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from scipy.spatial.transform import Rotation
 # from tf2.transformations import quaternion_from_euler
 import numpy as np
+import math
 
 TYPE_MAP = {
     1: 'i1', # np.int8
@@ -77,44 +78,57 @@ class PointcloudToNormalsConverter(Node):
     #     msg = self.calculate_normals(pointcloud)
     #     self.publisher_.publish(msg)
 
+    # assumes plumb bob distortion (aka no distortion) other than scaling and translating
+    # https://calib.io/blogs/knowledge-base/camera-models?srsltid=AfmBOoricX292iNdbQf7ZCepJyz20adlV-7n84QJZAOcHu1iRIO3lVou
+    def projectionToReal(self, x, y, depth):
+        camera_projection = ((x-320)/640*depth, (y-240)/480*depth, 1*depth)
+        return camera_projection
     
     # Inspired by MIT Robot Manipulation Chapter 5
     def estimate_normals_by_nearest_pixels(self, image, window_size, stride):
         
-        num_rows = image.shape[0]
-        num_cols = image.shape[1]
+        num_rows = image.shape[0] # 480
+        num_cols = image.shape[1] # 640
+
         # marker_array = MarkerArray()
         normals = []
         min_row, max_row, min_col, max_col  = self.bbox(image)
 
         for col in range(min_col, max_col, stride):
             for row in range(min_row, max_row, stride):
-                
+
+                x, y, z = self.projectionToReal(col, row, image[row][col])
+
                 col_window_range = np.arange(max(col - window_size, 0), min(col + window_size + 1, num_cols - 1))
                 row_window_range = np.arange(max(row - window_size, 0), min(row + window_size + 1, num_rows - 1))
 
                 if (col_window_range.size == 0 or row_window_range.size == 0): continue
 
-                avg_depth = 0
+                total_depth, total_x, total_y = (0, 0, 0)
                 total = 0
                 for wcol in col_window_range:
                     for wrow in row_window_range:
-                        avg_depth += image[wrow][wcol]
+                        xw, yw, zw = self.projectionToReal(wcol, wrow, image[wrow][wcol])
+                        total_depth += zw
+                        total_x += xw
+                        total_y += yw
                         total += 1
-                avg_depth = avg_depth / total
+                avg_depth = total_depth / total
+                avg_x = total_x / total
+                avg_y = total_y / total
 
                 W = np.zeros((3,3))
                 for wcol in col_window_range:
                     for wrow in row_window_range:
-                        x_diff = wcol - col
-                        y_diff = wrow - row
-                        z_diff = image[wrow][wcol] - avg_depth
-                        diff = np.array([x_diff, y_diff, z_diff])
+                        xw, yw, zw = self.projectionToReal(wcol, wrow, image[wrow][wcol])
+                        diff = np.array([xw-avg_x, yw-avg_y, zw-avg_depth])
                         W += np.outer(diff, diff)
 
                 eigen_info = np.linalg.eigh(W)
-                normal = eigen_info.eigenvectors[:,0]
-                center_point = (row, col, image[row][col])
+                # print(eigen_info)
+                # print(eigen_info.eigenvectors[0])
+                normal = eigen_info.eigenvectors[:, 0]
+                center_point = (x, y, z)
                 normals.append((normal, center_point))
 
         # # pointcloud.reshape
@@ -132,7 +146,7 @@ class PointcloudToNormalsConverter(Node):
         return (top_right[0], bottom_left[0], top_right[1], bottom_left[1])
 
     def create_normal_markers(self, image):
-        normals = self.estimate_normals_by_nearest_pixels(image, 3, 15)
+        normals = self.estimate_normals_by_nearest_pixels(image, 2, 10)
         markers = MarkerArray()
         id = 0
         for vector, point in normals:
@@ -148,25 +162,40 @@ class PointcloudToNormalsConverter(Node):
         marker.type = marker.ARROW
         marker.id = id
         marker.action = marker.ADD
-        marker.scale.x = 2.0
-        marker.scale.y = 0.1
-        marker.scale.z = 0.1
-        marker.color.r = 1.0
-        marker.color.g = 0.0
-        marker.color.b = 0.0
+        marker.scale.x = .1
+        marker.scale.y = 0.005
+        marker.scale.z = 0.005
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 1.0
         marker.color.a = 1.0
-        marker.pose.position.x = float(point[1]/ 20)
-        marker.pose.position.y = float(point[0]/ 20)
-        marker.pose.position.z = float(point[2] / 20)
-        quaternion = Rotation.align_vectors([[0,1,0]], [vector])[0].as_quat()
-        # quaternion = Rotation.from_euler('xyz', [vector[0], vector[1], vector[2]], degrees = False).as_quat()
+
+        # marker.pose.position.x = float(vector[0])
+        # marker.pose.position.y = float(vector[1])
+        # marker.pose.position.z = float(vector[2])
+
+        marker.pose.position.x = float(point[0] / 400)
+        marker.pose.position.y = float(point[1] / 400)
+        marker.pose.position.z = float(point[2] / 400)
+        quaternion = Rotation.align_vectors([vector], [[1,0,0]])[0].as_quat()
+
+        # print("_")
+        # print(point)
         # print(vector)
         # print(quaternion)
-        # print(quaternion2)
+
+        # # quaternion = Rotation.align_vectors([[1,0,0]], [vector])[0].as_quat()
+        # # quaternion = Rotation.align_vectors([[1,0,0]], [[0,0,1]])[0].as_quat()
+        # # quaternion = Rotation.from_euler('xyz', vector, degrees = False).as_quat()
+        # # quaternion = Rotation.from_euler('xyz', [0,1.51,0], degrees = False).as_quat()
+
+        # euler = Rotation.align_vectors([[1,0,0]], [vector])[0].as_euler('xyz', degrees=False)
+
         marker.pose.orientation.x = float(quaternion[0])
         marker.pose.orientation.y = float(quaternion[1])
         marker.pose.orientation.z = float(quaternion[2])
         marker.pose.orientation.w = float(quaternion[3])
+
         return marker
 
 
@@ -183,5 +212,28 @@ def main(args=None):
     minimal_subscriber.destroy_node()
     rclpy.shutdown()
 
+# from tf2_geometry_msgs import quaternion_from_euler
+
+
+
+
 if __name__ == '__main__':
     main()
+
+    # # print(Rotation.align_vectors([[1,0,0]], [[0,1,0]])[0].as_euler('xyz', degrees=True).as_quat())
+    # a = Rotation.align_vectors([[0,0,1]], [[1,0,0]])[0]
+    # e = a.as_euler('xyz', degrees=True)
+    # q = a.as_quat()
+    # m = a.as_matrix()
+    # q_to_e = Rotation.from_euler('xyz', e, degrees=True).as_quat()
+    # m_to_e = Rotation.from_matrix(m).as_quat()
+    # print(a)
+    # print(e)
+    # print(q)
+    # print(q_to_e)
+    # print(m_to_e)
+
+    # print(a.apply([1,0,0]))
+    # # print(Rotation.align_vectors([[1,.21, .123]], [[.34, .23, .12]])[0].as_quat())
+    # # print(Rotation.from_euler('xyz', [1,.21, .123], degrees = False).as_quat())
+
