@@ -25,28 +25,17 @@ class PointcloudToNormalsConverter(Node):
     def __init__(self):
         super().__init__('pointcloud_to_normals_converter')
 
-        # self.subscription = self.create_subscription(PointCloud2, '/camera/camera/depth/color/points', self.listener_callback, 10)
+        # self.subscription = self.create_subscription(PointCloud2, '/camera/camera/depth/color/points', self.listener_callback2, 10)
         self.subscription = self.create_subscription(Image, '/camera/camera/depth/image_rect_raw', self.listener_callback, 10)
-
         self.publisher = self.create_publisher(MarkerArray, 'normals', 10)
-
-        # self.window_size = 
-        # self.stride = 
-        # self.row_size = 
 
 
     def listener_callback(self, msg):
-        # pointcloud = self.pc2ToNumpy(msg)
-        # self.publish_message(pointcloud)
-        # self.get_logger().info('I heard: "%s"' % pointcloud[0])
-        self.get_logger().info("ROW")
-        # plt.imshow(self.image_to_numpy(msg), interpolation='nearest')
-        # plt.show()
+        self.get_logger().info("recieved")
 
         np_image = self.image_to_numpy(msg)
         markers = self.create_normal_markers(np_image)
         self.publisher.publish(markers)
-
 
     # I believe each uint16 represents a distance in mm
     def image_to_numpy(self, image):
@@ -56,7 +45,6 @@ class PointcloudToNormalsConverter(Node):
 
     def image_to_structured_dtype(self):
         return np.dtype(np.uint16)
-    
 
     # def pc2_to_numpy(self, pointcloud2):
     #     structured_dtype = self.pc2ToStructuredDtype(pointcloud2)
@@ -73,24 +61,23 @@ class PointcloudToNormalsConverter(Node):
     #         'itemsize':  pointcloud2.point_step
     #     })
 
-
-    # def publish_message(self, pointcloud):
-    #     msg = self.calculate_normals(pointcloud)
-    #     self.publisher_.publish(msg)
-
-    # assumes plumb bob distortion (aka no distortion) other than scaling and translating
-    # https://calib.io/blogs/knowledge-base/camera-models?srsltid=AfmBOoricX292iNdbQf7ZCepJyz20adlV-7n84QJZAOcHu1iRIO3lVou
-    def projectionToReal(self, x, y, depth):
-        camera_projection = ((x-320)/640*depth, (y-240)/480*depth, 1*depth)
-        return camera_projection
+    def create_normal_markers(self, image):
+        normals = self.estimate_normals_by_nearest_pixels(image, 2, 3)
+        markers = MarkerArray()
+        id = 0
+        for vector, point in normals:
+            marker = self.create_marker(vector, point, id)
+            markers.markers.append(marker)
+            id+=1
+        return markers
     
     # Inspired by MIT Robot Manipulation Chapter 5
+    # TODO: change to matrix multiplication and summed area tables?
     def estimate_normals_by_nearest_pixels(self, image, window_size, stride):
         
         num_rows = image.shape[0] # 480
         num_cols = image.shape[1] # 640
 
-        # marker_array = MarkerArray()
         normals = []
         min_row, max_row, min_col, max_col  = self.bbox(image)
 
@@ -125,17 +112,10 @@ class PointcloudToNormalsConverter(Node):
                         W += np.outer(diff, diff)
 
                 eigen_info = np.linalg.eigh(W)
-                # print(eigen_info)
-                # print(eigen_info.eigenvectors[0])
                 normal = eigen_info.eigenvectors[:, 0]
+                normal_f = self.flip_vector_towards_camera(normal)
                 center_point = (x, y, z)
-                normals.append((normal, center_point))
-
-        # # pointcloud.reshape
-        # for pixel in image:
-        #     # mark = self.create_marker()
-        #     normals.append(normal)
-        #     # marker_array.markers.append(mark)
+                normals.append((normal_f, center_point))
 
         return normals
         
@@ -145,51 +125,42 @@ class PointcloudToNormalsConverter(Node):
         bottom_left = np.max(mask, 1)
         return (top_right[0], bottom_left[0], top_right[1], bottom_left[1])
 
-    def create_normal_markers(self, image):
-        normals = self.estimate_normals_by_nearest_pixels(image, 2, 10)
-        markers = MarkerArray()
-        id = 0
-        for vector, point in normals:
-            marker = self.create_marker(point, vector, id)
-            markers.markers.append(marker)
-            id+=1
-        return markers
+    # assumes plumb bob distortion (aka no distortion) other than scaling and translating
+    # https://calib.io/blogs/knowledge-base/camera-models?srsltid=AfmBOoricX292iNdbQf7ZCepJyz20adlV-7n84QJZAOcHu1iRIO3lVou
+    # TODO: this is aligning our normal vectors to the color image (on left side). In reality this 2 camera depth map represents a wider area.
+    def projectionToReal(self, x, y, depth):
+        w = 480
+        h = 380
+        camera_projection = ((x-(320))/w*depth, (y-(240))/h*depth, 1*depth)
+        return camera_projection
 
-    def create_marker(self, point, vector, id):
+    def flip_vector_towards_camera(self, vector):
+        camera_dir = np.array([0,0,1])
+        vector_dir = np.array(vector)
+        if camera_dir.dot(vector_dir) > 0:
+            return -vector
+        return vector
+
+    def create_marker(self, vector, point, id):
         marker = Marker()
         marker.header.frame_id = '/camera_depth_optical_frame'
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.type = marker.ARROW
         marker.id = id
         marker.action = marker.ADD
-        marker.scale.x = .1
-        marker.scale.y = 0.005
-        marker.scale.z = 0.005
+        
+        marker.scale.x = .02
+        marker.scale.y = 0.002
+        marker.scale.z = 0.002
         marker.color.r = 0.0
         marker.color.g = 1.0
-        marker.color.b = 1.0
+        marker.color.b = 0.0
         marker.color.a = 1.0
 
-        # marker.pose.position.x = float(vector[0])
-        # marker.pose.position.y = float(vector[1])
-        # marker.pose.position.z = float(vector[2])
-
-        marker.pose.position.x = float(point[0] / 400)
-        marker.pose.position.y = float(point[1] / 400)
-        marker.pose.position.z = float(point[2] / 400)
+        marker.pose.position.x = float(point[0] / 1000)
+        marker.pose.position.y = float(point[1] / 1000)
+        marker.pose.position.z = float(point[2] / 1000)
         quaternion = Rotation.align_vectors([vector], [[1,0,0]])[0].as_quat()
-
-        # print("_")
-        # print(point)
-        # print(vector)
-        # print(quaternion)
-
-        # # quaternion = Rotation.align_vectors([[1,0,0]], [vector])[0].as_quat()
-        # # quaternion = Rotation.align_vectors([[1,0,0]], [[0,0,1]])[0].as_quat()
-        # # quaternion = Rotation.from_euler('xyz', vector, degrees = False).as_quat()
-        # # quaternion = Rotation.from_euler('xyz', [0,1.51,0], degrees = False).as_quat()
-
-        # euler = Rotation.align_vectors([[1,0,0]], [vector])[0].as_euler('xyz', degrees=False)
 
         marker.pose.orientation.x = float(quaternion[0])
         marker.pose.orientation.y = float(quaternion[1])
@@ -212,28 +183,7 @@ def main(args=None):
     minimal_subscriber.destroy_node()
     rclpy.shutdown()
 
-# from tf2_geometry_msgs import quaternion_from_euler
-
-
-
 
 if __name__ == '__main__':
     main()
-
-    # # print(Rotation.align_vectors([[1,0,0]], [[0,1,0]])[0].as_euler('xyz', degrees=True).as_quat())
-    # a = Rotation.align_vectors([[0,0,1]], [[1,0,0]])[0]
-    # e = a.as_euler('xyz', degrees=True)
-    # q = a.as_quat()
-    # m = a.as_matrix()
-    # q_to_e = Rotation.from_euler('xyz', e, degrees=True).as_quat()
-    # m_to_e = Rotation.from_matrix(m).as_quat()
-    # print(a)
-    # print(e)
-    # print(q)
-    # print(q_to_e)
-    # print(m_to_e)
-
-    # print(a.apply([1,0,0]))
-    # # print(Rotation.align_vectors([[1,.21, .123]], [[.34, .23, .12]])[0].as_quat())
-    # # print(Rotation.from_euler('xyz', [1,.21, .123], degrees = False).as_quat())
 
