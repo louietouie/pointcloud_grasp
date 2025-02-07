@@ -31,8 +31,6 @@ class PointcloudToNormalsConverter(Node):
 
 
     def listener_callback(self, msg):
-        self.get_logger().info("recieved")
-
         np_image = self.image_to_numpy(msg)
         markers = self.create_normal_markers(np_image)
         self.publisher.publish(markers)
@@ -62,7 +60,7 @@ class PointcloudToNormalsConverter(Node):
     #     })
 
     def create_normal_markers(self, image):
-        normals = self.estimate_normals_by_nearest_pixels(image, 2, 3)
+        normals = self.estimate_normals_by_nearest_pixels(image, 3, 20)
         markers = MarkerArray()
         id = 0
         for vector, point in normals:
