@@ -1,2 +1,0 @@
-[console_scripts]
-pc_processor_node = pointcloud_package.pc_processor_node:main
