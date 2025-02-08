@@ -62,11 +62,9 @@ class PointcloudToNormalsConverter(Node):
     def create_normal_markers(self, image):
         normals = self.estimate_normals_by_nearest_pixels(image, 3, 20)
         markers = MarkerArray()
-        id = 0
-        for vector, point in normals:
-            marker = self.create_marker(vector, point, id)
+        for idx, (vector, point) in enumerate(normals):
+            marker = self.create_marker(vector, point, idx)
             markers.markers.append(marker)
-            id+=1
         return markers
     
     # Inspired by MIT Robot Manipulation Chapter 5
@@ -79,15 +77,26 @@ class PointcloudToNormalsConverter(Node):
         normals = []
         min_row, max_row, min_col, max_col  = self.bbox(image)
 
+        integral_image = image.cumsum(axis=0).cumsum(axis=1)
+
         for col in range(min_col, max_col, stride):
             for row in range(min_row, max_row, stride):
 
                 x, y, z = self.projectionToReal(col, row, image[row][col])
 
-                col_window_range = np.arange(max(col - window_size, 0), min(col + window_size + 1, num_cols - 1))
-                row_window_range = np.arange(max(row - window_size, 0), min(row + window_size + 1, num_rows - 1))
+                wndw_min_c = max(col - window_size, 0)
+                wndw_max_c = min(col + window_size + 1, num_cols - 1)
+                wndw_min_r = max(row - window_size, 0)
+                wndw_max_r = min(row + window_size + 1, num_rows - 1)
+
+                # col_window_range = np.arange(max(col - window_size, 0), min(col + window_size + 1, num_cols - 1))
+                # row_window_range = np.arange(max(row - window_size, 0), min(row + window_size + 1, num_rows - 1))
 
                 if (col_window_range.size == 0 or row_window_range.size == 0): continue
+
+                avg_window_x = wndw_max_r + wndw_min_r / 2
+                avg_window_y = wndw_max_c + wndw_min_c / 2
+                avg_window_depth = integral_image[wndw_min_r][wndw_min_c] + integral_image[wndw_max_r][wndw_max_c] - integral_image[wndw_min_r][wndw_max_c] - integral_image[wndw_max_r][wndw_min_c]
 
                 total_depth, total_x, total_y = (0, 0, 0)
                 total = 0
@@ -126,6 +135,7 @@ class PointcloudToNormalsConverter(Node):
     # assumes plumb bob distortion (aka no distortion) other than scaling and translating
     # https://calib.io/blogs/knowledge-base/camera-models?srsltid=AfmBOoricX292iNdbQf7ZCepJyz20adlV-7n84QJZAOcHu1iRIO3lVou
     # TODO: this is aligning our normal vectors to the color image (on left side). In reality this 2 camera depth map represents a wider area.
+    # NOTE: this resize is WRONG because it divides w and y by different values, in turn turning the image into a 1 by 1 SQUARE... we want to keep the same aspect ratio 480/640
     def projectionToReal(self, x, y, depth):
         w = 480
         h = 380
