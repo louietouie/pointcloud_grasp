@@ -82,15 +82,15 @@ class PointcloudToNormalsConverter(Node):
         for col in range(min_col, max_col, stride):
             for row in range(min_row, max_row, stride):
 
-                x, y, z = self.projectionToReal(col, row, image[row][col])
+                x, y, z = self.projection_to_real(col, row, image[row][col])
 
                 wndw_min_c = max(col - window_size, 0)
                 wndw_max_c = min(col + window_size + 1, num_cols - 1)
                 wndw_min_r = max(row - window_size, 0)
                 wndw_max_r = min(row + window_size + 1, num_rows - 1)
 
-                # col_window_range = np.arange(max(col - window_size, 0), min(col + window_size + 1, num_cols - 1))
-                # row_window_range = np.arange(max(row - window_size, 0), min(row + window_size + 1, num_rows - 1))
+                col_window_range = np.arange(max(col - window_size, 0), min(col + window_size + 1, num_cols - 1))
+                row_window_range = np.arange(max(row - window_size, 0), min(row + window_size + 1, num_rows - 1))
 
                 if (col_window_range.size == 0 or row_window_range.size == 0): continue
 
@@ -102,7 +102,7 @@ class PointcloudToNormalsConverter(Node):
                 total = 0
                 for wcol in col_window_range:
                     for wrow in row_window_range:
-                        xw, yw, zw = self.projectionToReal(wcol, wrow, image[wrow][wcol])
+                        xw, yw, zw = self.projection_to_real(wcol, wrow, image[wrow][wcol])
                         total_depth += zw
                         total_x += xw
                         total_y += yw
@@ -114,7 +114,7 @@ class PointcloudToNormalsConverter(Node):
                 W = np.zeros((3,3))
                 for wcol in col_window_range:
                     for wrow in row_window_range:
-                        xw, yw, zw = self.projectionToReal(wcol, wrow, image[wrow][wcol])
+                        xw, yw, zw = self.projection_to_real(wcol, wrow, image[wrow][wcol])
                         diff = np.array([xw-avg_x, yw-avg_y, zw-avg_depth])
                         W += np.outer(diff, diff)
 
@@ -132,15 +132,27 @@ class PointcloudToNormalsConverter(Node):
         bottom_left = np.max(mask, 1)
         return (top_right[0], bottom_left[0], top_right[1], bottom_left[1])
 
-    # assumes plumb bob distortion (aka no distortion) other than scaling and translating
-    # https://calib.io/blogs/knowledge-base/camera-models?srsltid=AfmBOoricX292iNdbQf7ZCepJyz20adlV-7n84QJZAOcHu1iRIO3lVou
-    # TODO: this is aligning our normal vectors to the color image (on left side). In reality this 2 camera depth map represents a wider area.
-    # NOTE: this resize is WRONG because it divides w and y by different values, in turn turning the image into a 1 by 1 SQUARE... we want to keep the same aspect ratio 480/640
-    def projectionToReal(self, x, y, depth):
-        w = 480
-        h = 380
-        camera_projection = ((x-(320))/w*depth, (y-(240))/h*depth, 1*depth)
-        return camera_projection
+    # NOTE: https://calib.io/blogs/knowledge-base/camera-models?srsltid=AfmBOoricX292iNdbQf7ZCepJyz20adlV-7n84QJZAOcHu1iRIO3lVou
+    # NOTE: https://dev.intelrealsense.com/docs/projection-texture-mapping-and-occlusion-with-intel-realsense-depth-cameras
+
+    def projection_to_real(self, col, row, depth):
+
+        principal_point = np.array([640/2, 480/2])
+        focal_length = np.array([382.77, 382.77]) # rs-enumerate-devices -c
+        base_point = np.array([col, row])
+
+        def shift_and_normalize(point):
+            return (point - principal_point) / focal_length
+
+        def undo_distortion(point):
+            # rs-enumerate-devices -c
+            # uses Brown Conrady but k1-k5 are all 0
+            return point
+
+        x, y = depth * undo_distortion(shift_and_normalize(base_point))
+
+        return (x, y, depth)
+        
 
     def flip_vector_towards_camera(self, vector):
         camera_dir = np.array([0,0,1])
