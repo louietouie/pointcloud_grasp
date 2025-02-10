@@ -29,8 +29,7 @@ class PointcloudToNormalsConverter(Node):
     def listener_callback(self, msg):
         np_image = self.image_to_numpy(msg)
         markers = self.create_normal_markers(np_image)
-        self.get_logger().info("done")
-        # self.publisher.publish(markers)
+        self.publisher.publish(markers)
 
     # I believe each uint16 represents a distance in mm
     def image_to_numpy(self, image):
@@ -57,45 +56,38 @@ class PointcloudToNormalsConverter(Node):
     #     })
 
     def create_normal_markers(self, image):
-        normals = self.estimate_normals_by_nearest_pixels(image, 3, 20)
-        return normals
-        # markers = MarkerArray()
-        # for idx, (vector, point) in enumerate(normals):
-        #     marker = self.create_marker(vector, point, idx)
-        #     markers.markers.append(marker)
-        # return markers
+        normals = self.estimate_normals_by_nearest_pixels(image, 4, 10)
+        markers = MarkerArray()
+        for idx, (vector, point) in enumerate(normals):
+            marker = self.create_marker(vector, point, idx)
+            markers.markers.append(marker)
+        return markers
     
     # Inspired by MIT Robot Manipulation Chapter 5
     def estimate_normals_by_nearest_pixels(self, image, window_size, stride):
 
-        def projection_to_real(a):
-
-            col, row, depth = (a[0], a[1], a[2])
-            principal_point = np.array([640/2, 480/2])
-            focal_length = np.array([382.77, 382.77]) # rs-enumerate-devices -c
-            base_point = np.array([col, row])
-
-            def shift_and_normalize(point):
-                return (point - principal_point) / focal_length
-
-            def undo_distortion(point):
-                # rs-enumerate-devices -c
-                # uses Brown Conrady but k1-k5 are all 0
-                return point
-
-            x, y = depth * undo_distortion(shift_and_normalize(base_point))
-
-            return np.array([x, y, depth])
+        def deproject_image(depth_image):
             
-        normals = []
-        num_rows = image.shape[0] # 480
-        num_cols = image.shape[1] # 640
-        min_row, max_row, min_col, max_col  = self.bbox(image)
+            num_rows = depth_image.shape[0] # 480
+            num_cols = depth_image.shape[1] # 640
 
-        row_idx, col_idx = np.meshgrid(np.arange(num_cols),np.arange(num_rows))
-        position_image = np.stack((row_idx, col_idx, image), axis = 2)
-        deprojected_image = np.apply_along_axis(projection_to_real, 2, position_image) # TODO: apply_along_axis is slow, vectorize it? https://stackoverflow.com/questions/23849097/numpy-np-apply-along-axis-function-speed-up
-        # deprojected_image = position_image
+            row_idx, col_idx = np.meshgrid(np.arange(num_cols),np.arange(num_rows))
+            position_image = np.stack((row_idx, col_idx, image), axis = 2)
+
+            principal_point = np.array([640/2, 480/2, 0])
+            focal_length = np.array([382.77, 382.77, 1])
+            depth = position_image[:, :, 2:]
+            ones = np.full((position_image.shape[0], position_image.shape[1], 1), 1)
+            depth_scale = np.concatenate((depth, depth,ones), axis=2)
+            # rs-enumerate-devices -c... uses Brown Conrady but k1-k5 are all 0, so no distortion matrix is needed
+            deprojected_unscaled_image = (position_image - principal_point) / focal_length
+            deprojected_image = np.multiply(deprojected_unscaled_image, depth_scale)
+
+            return deprojected_image
+
+        normals = []
+        min_row, max_row, min_col, max_col  = self.bbox(image)
+        deprojected_image = deproject_image(image)
         integral_image = deprojected_image.cumsum(axis=0).cumsum(axis=1)
 
         for col in range(min_col, max_col, stride):
@@ -104,9 +96,9 @@ class PointcloudToNormalsConverter(Node):
                 x, y, z = deprojected_image[row][col]
 
                 wndw_min_c = max(col - window_size, 0)
-                wndw_max_c = min(col + window_size + 1, num_cols - 1)
+                wndw_max_c = min(col + window_size + 1, max_col - 1)
                 wndw_min_r = max(row - window_size, 0)
-                wndw_max_r = min(row + window_size + 1, num_rows - 1)
+                wndw_max_r = min(row + window_size + 1, max_row - 1)
 
                 col_window_range = np.arange(wndw_min_c, wndw_max_c)
                 row_window_range = np.arange(wndw_min_r, wndw_max_r)
