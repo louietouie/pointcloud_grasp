@@ -1,13 +1,10 @@
 import rclpy
 from rclpy.node import Node
-from matplotlib import pyplot as plt
 
-from sensor_msgs.msg import PointCloud2, Image
+from sensor_msgs.msg import Image # PointCloud2
 from visualization_msgs.msg import Marker, MarkerArray
 from scipy.spatial.transform import Rotation
-# from tf2.transformations import quaternion_from_euler
 import numpy as np
-import math
 
 TYPE_MAP = {
     1: 'i1', # np.int8
@@ -29,11 +26,11 @@ class PointcloudToNormalsConverter(Node):
         self.subscription = self.create_subscription(Image, '/camera/camera/depth/image_rect_raw', self.listener_callback, 10)
         self.publisher = self.create_publisher(MarkerArray, 'normals', 10)
 
-
     def listener_callback(self, msg):
         np_image = self.image_to_numpy(msg)
         markers = self.create_normal_markers(np_image)
-        self.publisher.publish(markers)
+        self.get_logger().info("done")
+        # self.publisher.publish(markers)
 
     # I believe each uint16 represents a distance in mm
     def image_to_numpy(self, image):
@@ -61,62 +58,67 @@ class PointcloudToNormalsConverter(Node):
 
     def create_normal_markers(self, image):
         normals = self.estimate_normals_by_nearest_pixels(image, 3, 20)
-        markers = MarkerArray()
-        for idx, (vector, point) in enumerate(normals):
-            marker = self.create_marker(vector, point, idx)
-            markers.markers.append(marker)
-        return markers
+        return normals
+        # markers = MarkerArray()
+        # for idx, (vector, point) in enumerate(normals):
+        #     marker = self.create_marker(vector, point, idx)
+        #     markers.markers.append(marker)
+        # return markers
     
     # Inspired by MIT Robot Manipulation Chapter 5
-    # TODO: change to matrix multiplication and summed area tables?
     def estimate_normals_by_nearest_pixels(self, image, window_size, stride):
-        
+
+        def projection_to_real(a):
+
+            col, row, depth = (a[0], a[1], a[2])
+            principal_point = np.array([640/2, 480/2])
+            focal_length = np.array([382.77, 382.77]) # rs-enumerate-devices -c
+            base_point = np.array([col, row])
+
+            def shift_and_normalize(point):
+                return (point - principal_point) / focal_length
+
+            def undo_distortion(point):
+                # rs-enumerate-devices -c
+                # uses Brown Conrady but k1-k5 are all 0
+                return point
+
+            x, y = depth * undo_distortion(shift_and_normalize(base_point))
+
+            return np.array([x, y, depth])
+            
+        normals = []
         num_rows = image.shape[0] # 480
         num_cols = image.shape[1] # 640
-
-        normals = []
         min_row, max_row, min_col, max_col  = self.bbox(image)
 
-        integral_image = image.cumsum(axis=0).cumsum(axis=1)
+        row_idx, col_idx = np.meshgrid(np.arange(num_cols),np.arange(num_rows))
+        position_image = np.stack((row_idx, col_idx, image), axis = 2)
+        deprojected_image = np.apply_along_axis(projection_to_real, 2, position_image) # TODO: apply_along_axis is slow, vectorize it? https://stackoverflow.com/questions/23849097/numpy-np-apply-along-axis-function-speed-up
+        # deprojected_image = position_image
+        integral_image = deprojected_image.cumsum(axis=0).cumsum(axis=1)
 
         for col in range(min_col, max_col, stride):
             for row in range(min_row, max_row, stride):
 
-                x, y, z = self.projection_to_real(col, row, image[row][col])
+                x, y, z = deprojected_image[row][col]
 
                 wndw_min_c = max(col - window_size, 0)
                 wndw_max_c = min(col + window_size + 1, num_cols - 1)
                 wndw_min_r = max(row - window_size, 0)
                 wndw_max_r = min(row + window_size + 1, num_rows - 1)
 
-                col_window_range = np.arange(max(col - window_size, 0), min(col + window_size + 1, num_cols - 1))
-                row_window_range = np.arange(max(row - window_size, 0), min(row + window_size + 1, num_rows - 1))
+                col_window_range = np.arange(wndw_min_c, wndw_max_c)
+                row_window_range = np.arange(wndw_min_r, wndw_max_r)
 
                 if (col_window_range.size == 0 or row_window_range.size == 0): continue
 
-                avg_window_x = wndw_max_r + wndw_min_r / 2
-                avg_window_y = wndw_max_c + wndw_min_c / 2
-                avg_window_depth = integral_image[wndw_min_r][wndw_min_c] + integral_image[wndw_max_r][wndw_max_c] - integral_image[wndw_min_r][wndw_max_c] - integral_image[wndw_max_r][wndw_min_c]
-
-                total_depth, total_x, total_y = (0, 0, 0)
-                total = 0
-                for wcol in col_window_range:
-                    for wrow in row_window_range:
-                        xw, yw, zw = self.projection_to_real(wcol, wrow, image[wrow][wcol])
-                        total_depth += zw
-                        total_x += xw
-                        total_y += yw
-                        total += 1
-                avg_depth = total_depth / total
-                avg_x = total_x / total
-                avg_y = total_y / total
-
-                W = np.zeros((3,3))
-                for wcol in col_window_range:
-                    for wrow in row_window_range:
-                        xw, yw, zw = self.projection_to_real(wcol, wrow, image[wrow][wcol])
-                        diff = np.array([xw-avg_x, yw-avg_y, zw-avg_depth])
-                        W += np.outer(diff, diff)
+                window_actual_size = (wndw_max_c - wndw_min_c) * (wndw_max_r - wndw_min_r)
+                avg_xyd = (integral_image[wndw_min_r][wndw_min_c] + integral_image[wndw_max_r][wndw_max_c] - integral_image[wndw_min_r][wndw_max_c] - integral_image[wndw_max_r][wndw_min_c]) / window_actual_size
+                
+                points_in_window = deprojected_image[wndw_min_r:wndw_max_r, wndw_min_c:wndw_max_c].reshape((-1,3))
+                diff = points_in_window - avg_xyd
+                W = diff.T @ diff
 
                 eigen_info = np.linalg.eigh(W)
                 normal = eigen_info.eigenvectors[:, 0]
@@ -134,25 +136,6 @@ class PointcloudToNormalsConverter(Node):
 
     # NOTE: https://calib.io/blogs/knowledge-base/camera-models?srsltid=AfmBOoricX292iNdbQf7ZCepJyz20adlV-7n84QJZAOcHu1iRIO3lVou
     # NOTE: https://dev.intelrealsense.com/docs/projection-texture-mapping-and-occlusion-with-intel-realsense-depth-cameras
-
-    def projection_to_real(self, col, row, depth):
-
-        principal_point = np.array([640/2, 480/2])
-        focal_length = np.array([382.77, 382.77]) # rs-enumerate-devices -c
-        base_point = np.array([col, row])
-
-        def shift_and_normalize(point):
-            return (point - principal_point) / focal_length
-
-        def undo_distortion(point):
-            # rs-enumerate-devices -c
-            # uses Brown Conrady but k1-k5 are all 0
-            return point
-
-        x, y = depth * undo_distortion(shift_and_normalize(base_point))
-
-        return (x, y, depth)
-        
 
     def flip_vector_towards_camera(self, vector):
         camera_dir = np.array([0,0,1])
@@ -206,4 +189,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
