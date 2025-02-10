@@ -17,12 +17,14 @@ TYPE_MAP = {
     8: 'f8', # np.float64
 }
 
+# NOTE: https://calib.io/blogs/knowledge-base/camera-models?srsltid=AfmBOoricX292iNdbQf7ZCepJyz20adlV-7n84QJZAOcHu1iRIO3lVou
+# NOTE: https://dev.intelrealsense.com/docs/projection-texture-mapping-and-occlusion-with-intel-realsense-depth-cameras
+
 class PointcloudToNormalsConverter(Node):
 
     def __init__(self):
         super().__init__('pointcloud_to_normals_converter')
 
-        # self.subscription = self.create_subscription(PointCloud2, '/camera/camera/depth/color/points', self.listener_callback2, 10)
         self.subscription = self.create_subscription(Image, '/camera/camera/depth/image_rect_raw', self.listener_callback, 10)
         self.publisher = self.create_publisher(MarkerArray, 'normals', 10)
 
@@ -31,29 +33,13 @@ class PointcloudToNormalsConverter(Node):
         markers = self.create_normal_markers(np_image)
         self.publisher.publish(markers)
 
-    # I believe each uint16 represents a distance in mm
     def image_to_numpy(self, image):
         structured_dtype = self.image_to_structured_dtype()
         array_1d = np.array(image.data, np.uint8, copy=False).view(structured_dtype)
         return array_1d.reshape(image.height, image.width)
 
     def image_to_structured_dtype(self):
-        return np.dtype(np.uint16)
-
-    # def pc2_to_numpy(self, pointcloud2):
-    #     structured_dtype = self.pc2ToStructuredDtype(pointcloud2)
-    #     return np.array(pointcloud2.data, np.uint8, copy=False).view(structured_dtype)
-    #     # numpy_pc = np.frombuffer(bytes(my_bytes), structured_dtype)
-
-    # def pc2_to_structured_dtype(self, pointcloud2):
-    #     fields = pointcloud2.fields
-    #     big_endian = ">" if pointcloud2.is_bigendian else "<"
-    #     return np.dtype({
-    #         'names': [f.name for f in fields],
-    #         'formats': [big_endian + TYPE_MAP.get(f.datatype) for f in fields],
-    #         'offsets': [f.offset for f in fields],
-    #         'itemsize':  pointcloud2.point_step
-    #     })
+        return np.dtype(np.uint16) # I believe each uint16 represents a distance in mm
 
     def create_normal_markers(self, image):
         normals = self.estimate_normals_by_nearest_pixels(image, 4, 10)
@@ -125,9 +111,6 @@ class PointcloudToNormalsConverter(Node):
         top_right = np.min(mask, 1)
         bottom_left = np.max(mask, 1)
         return (top_right[0], bottom_left[0], top_right[1], bottom_left[1])
-
-    # NOTE: https://calib.io/blogs/knowledge-base/camera-models?srsltid=AfmBOoricX292iNdbQf7ZCepJyz20adlV-7n84QJZAOcHu1iRIO3lVou
-    # NOTE: https://dev.intelrealsense.com/docs/projection-texture-mapping-and-occlusion-with-intel-realsense-depth-cameras
 
     def flip_vector_towards_camera(self, vector):
         camera_dir = np.array([0,0,1])
