@@ -76,6 +76,7 @@ class PointcloudToNormalsConverter(Node):
         deprojected_image = deproject_image(image)
         integral_image = deprojected_image.cumsum(axis=0).cumsum(axis=1)
 
+        # TODO: replace with numpy.lib.stride_tricks.sliding_window_view?
         for col in range(min_col, max_col, stride):
             for row in range(min_row, max_row, stride):
 
