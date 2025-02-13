@@ -6,17 +6,6 @@ from visualization_msgs.msg import Marker, MarkerArray
 from scipy.spatial.transform import Rotation
 import numpy as np
 
-TYPE_MAP = {
-    1: 'i1', # np.int8
-    2: 'u1', # np.uint8
-    3: 'i2', # np.int16
-    4: 'u2', # np.uint16
-    5: 'i4', # np.int32
-    6: 'u4', # np.uint32
-    7: 'f4', # np.float32
-    8: 'f8', # np.float64
-}
-
 # NOTE: https://calib.io/blogs/knowledge-base/camera-models?srsltid=AfmBOoricX292iNdbQf7ZCepJyz20adlV-7n84QJZAOcHu1iRIO3lVou
 # NOTE: https://dev.intelrealsense.com/docs/projection-texture-mapping-and-occlusion-with-intel-realsense-depth-cameras
 
@@ -34,15 +23,12 @@ class PointcloudToNormalsConverter(Node):
         self.publisher.publish(markers)
 
     def image_to_numpy(self, image):
-        structured_dtype = self.image_to_structured_dtype()
+        structured_dtype = np.dtype(np.uint16) # I believe each uint16 represents a distance in mm
         array_1d = np.array(image.data, np.uint8, copy=False).view(structured_dtype)
         return array_1d.reshape(image.height, image.width)
 
-    def image_to_structured_dtype(self):
-        return np.dtype(np.uint16) # I believe each uint16 represents a distance in mm
-
     def create_normal_markers(self, image):
-        normals = self.estimate_normals_by_nearest_pixels(image, 4, 10)
+        normals = self.estimate_normals_by_nearest_pixels(image, 4, 5)
         markers = MarkerArray()
         for idx, (vector, point) in enumerate(normals):
             marker = self.create_marker(vector, point, idx)
@@ -100,10 +86,10 @@ class PointcloudToNormalsConverter(Node):
                 W = diff.T @ diff
 
                 eigen_info = np.linalg.eigh(W)
-                normal = eigen_info.eigenvectors[:, 0]
-                normal_f = self.flip_vector_towards_camera(normal)
+                smallest_eig = eigen_info.eigenvectors[:, 0]
+                normal = self.flip_vector_towards_camera(smallest_eig)
                 center_point = (x, y, z)
-                normals.append((normal_f, center_point))
+                normals.append((normal, center_point))
 
         return normals
         
@@ -114,7 +100,7 @@ class PointcloudToNormalsConverter(Node):
         return (top_right[0], bottom_left[0], top_right[1], bottom_left[1])
 
     def flip_vector_towards_camera(self, vector):
-        camera_dir = np.array([0,0,1])
+        camera_dir = np.array([0,0,1]) # TODO: camera position may change
         vector_dir = np.array(vector)
         if camera_dir.dot(vector_dir) > 0:
             return -vector
@@ -151,17 +137,10 @@ class PointcloudToNormalsConverter(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-
     minimal_subscriber = PointcloudToNormalsConverter()
-
     rclpy.spin(minimal_subscriber)
-
-    # Destroy the node explicitly
-    # (optional - otherwise it will be done automatically
-    # when the garbage collector destroys the node object)
     minimal_subscriber.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
