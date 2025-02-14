@@ -5,6 +5,8 @@ from sensor_msgs.msg import Image
 from geometry_msgs.msg import Pose # Transform
 from visualization_msgs.msg import Marker
 
+from scipy.optimize import least_squares
+
 class CameraCalibrator(Node):
     
     def __init__(self, chessboard_length):
@@ -33,6 +35,10 @@ class ChessboardRepresentation():
 
         self.full_length = full_length
 
+    def create_points(self):
+
+        return 0
+
 
 class PointToPixelSolver():
     
@@ -40,9 +46,23 @@ class PointToPixelSolver():
 
         self.chessboard = chessboard
 
-    def solve(self, image):
-        
-        pose = Pose()
+    def solve(self, image, initial_guess):
+
+        # Ma = b
+        def function(x):
+            return 0
+
+        best_homography = 0
+        max_inliers = 0
+        for _ in range(ransac_rounds):
+            matches = ransac_sample(image)
+            homography = least_squares(function(matches), initial_guess, method="lm")
+            inliers = 0
+            if inliers > max_inliers:
+                max_inliers = inliers
+                best_homography = homography
+
+        pose = Pose(best_homography)
         return pose
     
         # image to grayscale
@@ -51,3 +71,9 @@ class PointToPixelSolver():
             # what about noise of image points? Should Levenberg be done multiple times with RANSAC and use the best one?
         # invert solver homography to get camera position wrt world instead of world position wrt camera?
         # split homography into a ROS2 pose (a Point position and Quaternion quaternion)
+    
+    def ransac_sample(self, points_3d, points_2d, num_samples):
+        return 0
+    
+    def ransac_sample_2(self, matches, num_samples):
+        return 0
