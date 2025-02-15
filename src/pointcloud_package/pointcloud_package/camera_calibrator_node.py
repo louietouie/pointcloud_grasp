@@ -23,10 +23,13 @@ class CameraCalibrator(Node):
         # chessboard = ChessboardRepresentation(chessboard_length)
         # self.solver = PointToPixelSolver(chessboard)
 
-        image = cv2.imread('chessboard.png', cv2.IMREAD_GRAYSCALE)
-        ret, corners = cv2.findChessboardCorners(image, (7,7), None)
+        row = 6
+        col = 7
+
+        image = cv2.imread('chessboard_rect4.png', cv2.IMREAD_GRAYSCALE)
+        ret, corners = cv2.findChessboardCorners(image, (row, col), None)
         corners = corners.reshape((-1,2))
-        object_corners = self.object_corners(chessboard_length).astype('float32')
+        object_corners = self.object_corners(chessboard_length, row, col).astype('float32')
         
         camera_matrix = np.float64([[382.77, 0, 640/2],
                                     [0, 382.77, 480/2],
@@ -81,7 +84,7 @@ class CameraCalibrator(Node):
         self.publisher_marker.publish(markers)
         print("DONE")
 
-        cv2.drawChessboardCorners(image, (7,7), corners, ret)
+        cv2.drawChessboardCorners(image, (row, col), corners, ret)
         cv2.imshow('window', image)
         cv2.waitKey(10)
 
@@ -92,9 +95,9 @@ class CameraCalibrator(Node):
         # self.publisher_marker.publish(marker)
         # self.publisher_pose.publish(pose)
 
-    def object_corners(self, size):
-        x = np.arange(7)
-        y = np.arange(7)
+    def object_corners(self, size, row, col):
+        x = np.arange(row)
+        y = np.arange(col)
         arr = np.meshgrid(x,y)
         z = arr[0] * 0
         corners = np.stack((arr[0], arr[1], z), axis=2) * size
