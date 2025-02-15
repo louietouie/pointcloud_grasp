@@ -24,7 +24,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'pc_processor_node = pointcloud_package.pc_processor_node:main'
+            'pc_processor_node = pointcloud_package.pc_processor_node:main',
+            'camera_calibrator_node = pointcloud_package.camera_calibrator_node:main'
         ],
     },
 )
