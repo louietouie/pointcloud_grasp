@@ -38,7 +38,14 @@ class CameraCalibrator(Node):
         distorition_matrix2 = np.array([0.,0.,0.,0.,0.])
 
         ret, rotation, translation = cv2.solvePnP(object_corners, corners, camera_matrix, distorition_matrix)
+        # ret, rotation, translation = cv2.solvePnP(object_corners, corners, camera_matrix, distorition_matrix, useExtrinsicGuess=True, rvec=b, tvec=a)
+        ret2, rotation2, translation2, es = cv2.solvePnPGeneric(object_corners, corners, camera_matrix, distorition_matrix, flags=cv2.SOLVEPNP_IPPE)
 
+        print("ALL SOLUTIONS")
+        print(rotation2)
+        print(translation2)
+
+        print("USED SOLUTION")
         print(rotation.flatten())
         print(translation.flatten())
 
