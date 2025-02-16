@@ -51,22 +51,23 @@ class CameraCalibrator(Node):
 
         ret, rotation, translation = cv2.solvePnP(object_corners, corners, camera_matrix, distorition_matrix)
 
-        print("found rot and translation")
+        print("the rotation and translation ?of the objects in the camera frame?")
         rot_array, _ = cv2.Rodrigues(rotation)
         print(rot_array)
         print(translation)
 
-        print("inverted rotation and translation")
+        print("the inverted rotation and translation of the camera in the world frame")
         rotation_i, translation_i = self.invert_rot_and_pose(rotation, translation)
         rot_array_i, _ = cv2.Rodrigues(rotation_i)
         print(rot_array_i)
         print(translation_i)
 
-        print("flipped rotation and translation")
+        print("flipped rotation and translation over the xy plane. This is also a solution as long as the chessboard is coplanar with xy plane and z = 0")
         # translation_x = translation_i * np.array([[1],[1],[-1]])
         translation_x = translation_i * np.array([1,1,-1])
         rot_array_x, _ = cv2.Rodrigues(rotation_i)
 
+        print("it is important that the matrix changes are before our old translation matrix. when placed after, i believe this 180 degree rotation around the z axis happens after the translation but about the old axis some distance away, so that the rotatation then also includes some translation. should probably take time to get more clear on this")
         rot_array_x = np.array([
                             [-1,0,0],
                             [0,-1,0],
