@@ -25,53 +25,72 @@ class CameraCalibrator(Node):
 
         row = 6
         col = 7
+        
+        image = cv2.imread('chessboard_high2.png')
+        w = image.shape[1]
+        h = image.shape[0]
+        mask = np.zeros(image.shape[:2], dtype="uint8")
+        cv2.rectangle(mask, (700, 700), (1200, 1000), 255, -1)
+        image = cv2.bitwise_and(image, image, mask=mask)
 
-        image = cv2.imread('chessboard_rect4.png', cv2.IMREAD_GRAYSCALE)
-        ret, corners = cv2.findChessboardCorners(image, (row, col), None)
+        # cv2.namedWindow("window_o", cv2.WINDOW_NORMAL) 
+        # cv2.imshow('window_o', image)
+        # cv2.waitKey(100)
+
+        # ret, corners = cv2.findChessboardCorners(image, (row, col), None)
+        # ret, corners = cv2.findChessboardCorners(image, (row, col), flags=cv2.CALIB_CB_FILTER_QUADS)
+        ret, corners = cv2.findChessboardCornersSB(image, (row, col), None)
         corners = corners.reshape((-1,2))
         object_corners = self.object_corners(chessboard_length, row, col).astype('float32')
         
-        camera_matrix = np.float64([[382.77, 0, 640/2],
-                                    [0, 382.77, 480/2],
+        camera_matrix = np.float64([[382.77, 0, w/2],
+                                    [0, 382.77, h/2],
                                     [0, 0, 1]])
         distorition_matrix = np.array([0,0,0,0,0])
         distorition_matrix2 = np.array([0.,0.,0.,0.,0.])
 
         ret, rotation, translation = cv2.solvePnP(object_corners, corners, camera_matrix, distorition_matrix)
-        # ret, rotation, translation = cv2.solvePnP(object_corners, corners, camera_matrix, distorition_matrix, useExtrinsicGuess=True, rvec=b, tvec=a)
-        ret2, rotation2, translation2, es = cv2.solvePnPGeneric(object_corners, corners, camera_matrix, distorition_matrix, flags=cv2.SOLVEPNP_IPPE)
 
-        print("ALL SOLUTIONS")
-        print(rotation2)
-        print(translation2)
-
-        print("USED SOLUTION")
-        print(rotation.flatten())
-        print(translation.flatten())
-
+        print("found rot and translation")
         rot_array, _ = cv2.Rodrigues(rotation)
+        print(rot_array)
+        print(translation)
 
-        pose_a = np.hstack((rot_array, translation.reshape((-1,1))))
-        pose_b = np.vstack((pose_a, [[0, 0, 0, 1]]))
-        pose_inv = np.linalg.inv(pose_b)
-        rot_array2 = pose_inv[:3,:3]
-        trans2 = pose_inv[:3,3]
+        print("inverted rotation and translation")
+        rotation_i, translation_i = self.invert_rot_and_pose(rotation, translation)
+        rot_array_i, _ = cv2.Rodrigues(rotation_i)
+        print(rot_array_i)
+        print(translation_i)
 
-        print("________________")
-        print(pose_b)
-        print(pose_inv)
-        print(trans2)
+        print("flipped rotation and translation")
+        # translation_x = translation_i * np.array([[1],[1],[-1]])
+        translation_x = translation_i * np.array([1,1,-1])
+        rot_array_x, _ = cv2.Rodrigues(rotation_i)
 
-        # marker = self.create_marker(rotation.flatten(), -translation.flatten(), 1)
-        # marker = self.create_marker(rot_array, translation.flatten(), 1)
+        rot_array_x = np.array([
+                            [-1,0,0],
+                            [0,-1,0],
+                            [0,0,1]
+        ]) @ rot_array_x
+
+        rotation_x, _ = cv2.Rodrigues(rot_array_x)
+
+        rotation_x_i, translation_x_i = self.invert_rot_and_pose(rotation_x, translation_x)
+
+        print(rot_array_x)
+        print(translation_x)
 
         markers = MarkerArray()
 
-        # marker = self.create_marker(rotation.flatten(), translation.flatten(), 0)
-        marker = self.create_marker(rot_array2, trans2, 0)
+        marker = self.create_marker(rot_array, translation, 9000, [1,1,1])
         markers.markers.append(marker)
-        more = cv2.projectPoints(object_corners, rotation, translation, camera_matrix, distorition_matrix2)[0].reshape(-1,2)
 
+        marker = self.create_marker(rot_array_i, translation_i, 9001, [.5,0,0])
+        markers.markers.append(marker)
+        
+        marker = self.create_marker(rot_array_x, translation_x, 9002, [0,0,0])
+        markers.markers.append(marker)
+        
         for idx, point in enumerate(corners):
             marker = self.create_marker2([0,0,0], point, idx+3000, [0,1,1])
             markers.markers.append(marker)
@@ -80,11 +99,13 @@ class CameraCalibrator(Node):
             marker = self.create_marker2([0,0,0], point, idx+1, [0,0,1])
             markers.markers.append(marker)
 
+        more = cv2.projectPoints(object_corners, rotation_x_i, translation_x_i, camera_matrix, distorition_matrix2)[0].reshape(-1,2)
+        # more = cv2.projectPoints(object_corners, rotation_x_i, translation_x_i, camera_matrix, distorition_matrix2)[0].reshape(-1,2)
         for idx, point in enumerate(more):
             marker = self.create_marker2([0,0,0], point, idx+1000, [1,0,0])
             markers.markers.append(marker)
 
-        marker = self.create_marker2([0,0,0], [640, 480,0], idx+2000, [1,1,0])
+        marker = self.create_marker2([0,0,0], [w,h,0], idx+2000, [1,1,0])
         markers.markers.append(marker)
 
         print("publshing")
@@ -92,8 +113,20 @@ class CameraCalibrator(Node):
         print("DONE")
 
         cv2.drawChessboardCorners(image, (row, col), corners, ret)
-        cv2.imshow('window', image)
+        cv2.namedWindow("window_z", cv2.WINDOW_NORMAL) 
+        cv2.imshow('window_z', image)
         cv2.waitKey(10)
+
+
+    def invert_rot_and_pose(self, rotation, translation):
+        rot_array, _ = cv2.Rodrigues(rotation)
+        pose_a = np.hstack((rot_array, translation.reshape((-1,1))))
+        pose_b = np.vstack((pose_a, [[0, 0, 0, 1]]))
+        pose_inv = np.linalg.inv(pose_b)
+        rot_t_array = pose_inv[:3,:3]
+        rot_t, _ = cv2.Rodrigues(rot_t_array)
+        trans_t = pose_inv[:3,3]
+        return (rot_t, trans_t)
 
     def listener_callback(self, msg):
         return 0
@@ -114,7 +147,7 @@ class CameraCalibrator(Node):
         marker = Marker()
         return marker
     
-    def create_marker(self, vector, point, id):
+    def create_marker(self, vector, point, id, color):
         marker = Marker()
         marker.header.frame_id = '/camera_depth_optical_frame'
         marker.header.stamp = self.get_clock().now().to_msg()
@@ -125,9 +158,9 @@ class CameraCalibrator(Node):
         marker.scale.x = .02
         marker.scale.y = 0.002
         marker.scale.z = 0.002
-        marker.color.r = 0.0
-        marker.color.g = 1.0
-        marker.color.b = 0.0
+        marker.color.r = float(color[0])
+        marker.color.g = float(color[1])
+        marker.color.b = float(color[2])
         marker.color.a = 1.0
 
         marker.pose.position.x = float(point[0] / 1000)
