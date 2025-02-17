@@ -25,29 +25,22 @@ class CameraCalibrator(Node):
         object_points = calibrator.get_points()
 
         for idx, point in enumerate(object_points):
-            print(point)
-            marker = self.create_marker2(point, idx+1, [0,0,1])
+            marker = self.create_marker(point, idx+1, color=[0,0,1])
             markers.markers.append(marker)
-
-        print(len(markers.markers))
-        for idx, i in enumerate(markers.markers):
-            print(idx)
-            print(i)
-            print("______________________")
 
         rows, cols = calibrator.grid_size()
         camera_points = camera.find_image_points(rows, cols)
-        masks = []
-        masks.append(cv2.fillPoly(camera.image, pts=[], color=(255,255,255)))
-        masks.append(cv2.fillPoly(camera.image, pts=[], color=(255,255,255)))
-        masks.append(cv2.fillPoly(camera.image, pts=[], color=(255,255,255)))
-        camera_points = camera.find_cube_points(rows, cols, masks)
+        # masks = []
+        # masks.append(cv2.fillPoly(camera.image, pts=[], color=(255,255,255)))
+        # masks.append(cv2.fillPoly(camera.image, pts=[], color=(255,255,255)))
+        # masks.append(cv2.fillPoly(camera.image, pts=[], color=(255,255,255)))
+        # camera_points = camera.find_cube_points(rows, cols, masks)
 
         for idx, point in enumerate(camera_points):
-            marker = self.create_marker2(point, idx+3000, [0,1,1])
+            marker = self.create_marker(point, idx+3000, color=[0,1,1])
             markers.markers.append(marker)
 
-        marker = self.create_marker2([camera.width,camera.height,0], idx+2000, [1,1,0])
+        marker = self.create_marker([camera.width,camera.height,0], idx+2000, color=[1,1,0])
         markers.markers.append(marker)
 
         cv2.drawChessboardCorners(camera.image, (rows, cols), camera_points, True) # last arg should be ret
@@ -73,21 +66,23 @@ class CameraCalibrator(Node):
 
         r_c_w_f, _ = cv2.Rodrigues(R_c_w_f)
 
-        marker = self.create_marker(R_c_w, T_c_w, 9000, [1,1,1])
+        marker = self.create_marker(T_c_w, 9000, scale=[0.02, 0.002, 0.002], mtype='a', R=R_c_w, color=[1,1,1])
         markers.markers.append(marker)
 
-        marker = self.create_marker(R_w_c, T_w_c, 9001, [.5,0,0])
+        marker = self.create_marker(T_w_c, 9001, scale=[0.02, 0.002, 0.002], mtype='a', R=R_c_w, color=[.5,0,0])
+        markers.markers.append(marker)
+
+        marker = self.create_marker(T_w_c_f, 9002, scale=[0.02, 0.002, 0.002], mtype='a', R=R_c_w_f, color=[0,0,0])
         markers.markers.append(marker)
 
         reprojection_points = cv2.projectPoints(object_points, r_c_w_f, T_c_w_f, camera.intrinsics, camera.distortion)[0].reshape(-1,2)
         for idx, point in enumerate(reprojection_points):
-            marker = self.create_marker2(point, idx+1000, [1,0,0])
+            marker = self.create_marker(point, idx+1000, color=[1,0,0])
             markers.markers.append(marker)
 
         print("publshing")
         self.publisher_marker.publish(markers)
         print("DONE")
-
 
     def listener_callback(self, msg):
         return 0
@@ -100,58 +95,39 @@ class CameraCalibrator(Node):
         trans_t = pose_inv[:3,3]
         return (rot_t_array, trans_t)
     
-    def create_marker(self, vector, point, id, color):
+    def create_marker(self, point, id, scale = [0.005, 0.005, 0.005], mtype = None, R = None, color = None, ):
         marker = Marker()
         marker.header.frame_id = '/camera_depth_optical_frame'
         marker.header.stamp = self.get_clock().now().to_msg()
-        marker.type = marker.ARROW
         marker.id = id
         marker.action = marker.ADD
         
-        marker.scale.x = .02
-        marker.scale.y = 0.002
-        marker.scale.z = 0.002
-        marker.color.r = float(color[0])
-        marker.color.g = float(color[1])
-        marker.color.b = float(color[2])
-        marker.color.a = 1.0
+        marker.scale.x = scale[0]
+        marker.scale.y = scale[1]
+        marker.scale.z = scale[2]
 
         marker.pose.position.x = float(point[0] / 1000)
         marker.pose.position.y = float(point[1] / 1000)
-        marker.pose.position.z = float(point[2] / 1000)
-
-        quaternion = Rotation.from_matrix(vector).as_quat()      
-
-        marker.pose.orientation.x = float(quaternion[0])
-        marker.pose.orientation.y = float(quaternion[1])
-        marker.pose.orientation.z = float(quaternion[2])
-        marker.pose.orientation.w = float(quaternion[3])
-
-        return marker
-    
-    def create_marker2(self, point, id, color):
-        marker = Marker()
-        marker.header.frame_id = '/camera_depth_optical_frame'
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.type = marker.SPHERE
-        marker.id = id
-        marker.action = marker.ADD
-        
-        marker.scale.x = .005
-        marker.scale.y = 0.005
-        marker.scale.z = 0.005
-        marker.color.r = float(color[0])
-        marker.color.g = float(color[1])
-        marker.color.b = float(color[2])
-        marker.color.a = 1.0
-
-        print('m' + str(id))
-        print(point)
-
-        marker.pose.position.x = float(point[0] / 1000)
-        marker.pose.position.y = float(point[1] / 1000)
-        z = float(point[2]/1000) if point[2] else 0.
+        z = float(point[2]/1000) if len(point) > 2 else 0.
         marker.pose.position.z = z
+
+        if (mtype == 'a'):
+            marker.type = marker.ARROW
+        else:
+            marker.type = marker.SPHERE
+
+        if (color):
+            marker.color.r = float(color[0])
+            marker.color.g = float(color[1])
+            marker.color.b = float(color[2])
+            marker.color.a = 1.0
+
+        if (R is not None):
+            quaternion = Rotation.from_matrix(R).as_quat()
+            marker.pose.orientation.x = float(quaternion[0])
+            marker.pose.orientation.y = float(quaternion[1])
+            marker.pose.orientation.z = float(quaternion[2])
+            marker.pose.orientation.w = float(quaternion[3])
 
         return marker
 
@@ -253,9 +229,9 @@ class Camera():
 def main(args=None):
     rclpy.init(args=args)
 
-    camera = Camera(382.77, 'chessboard_top.png')
-    # calibrator = Chessboard(10, 6, 7)
-    calibrator = Chesscube(20, 30, 6, 6)
+    camera = Camera(382.77, 'images/chessboard_high2.png')
+    calibrator = Chessboard(10, 6, 7)
+    # calibrator = Chesscube(20, 30, 6, 6)
 
     minimal_subscriber = CameraCalibrator(camera, calibrator)
     rclpy.spin(minimal_subscriber)
