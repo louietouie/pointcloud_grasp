@@ -13,136 +13,83 @@ import numpy as np
 
 class CameraCalibrator(Node):
     
-    def __init__(self, chessboard_length):
+    def __init__(self, camera, calibrator):
         super().__init__('camera_calibrator')
 
         self.subscription = self.create_subscription(Image, '/camera/camera/depth/image_rect_raw', self.listener_callback, 10)
         self.publisher_marker = self.create_publisher(MarkerArray, 'camera_icon', 10)
         self.publisher_pose = self.create_publisher(Pose, 'camera_pose', 10)
 
-        # chessboard = ChessboardRepresentation(chessboard_length)
-        # self.solver = PointToPixelSolver(chessboard)
-
-        row = 6
-        col = 7
-        
-        image = cv2.imread('chessboard_high2.png')
-        w = image.shape[1]
-        h = image.shape[0]
-        mask = np.zeros(image.shape[:2], dtype="uint8")
-        cv2.rectangle(mask, (700, 700), (1200, 1000), 255, -1)
-        image = cv2.bitwise_and(image, image, mask=mask)
-
-        # cv2.namedWindow("window_o", cv2.WINDOW_NORMAL) 
-        # cv2.imshow('window_o', image)
-        # cv2.waitKey(100)
-
-        # ret, corners = cv2.findChessboardCorners(image, (row, col), None)
-        # ret, corners = cv2.findChessboardCorners(image, (row, col), flags=cv2.CALIB_CB_FILTER_QUADS)
-        ret, corners = cv2.findChessboardCornersSB(image, (row, col), None)
-        corners = corners.reshape((-1,2))
-        object_corners = self.object_corners(chessboard_length, row, col).astype('float32')
-        
-        camera_matrix = np.float64([[382.77, 0, w/2],
-                                    [0, 382.77, h/2],
-                                    [0, 0, 1]])
-        distorition_matrix = np.array([0,0,0,0,0])
-        distorition_matrix2 = np.array([0.,0.,0.,0.,0.])
-
-        ret, rotation, translation = cv2.solvePnP(object_corners, corners, camera_matrix, distorition_matrix)
-
-        print("the rotation and translation ?of the objects in the camera frame?")
-        rot_array, _ = cv2.Rodrigues(rotation)
-        print(rot_array)
-        print(translation)
-
-        print("the inverted rotation and translation of the camera in the world frame")
-        rotation_i, translation_i = self.invert_rot_and_pose(rotation, translation)
-        rot_array_i, _ = cv2.Rodrigues(rotation_i)
-        print(rot_array_i)
-        print(translation_i)
-
-        print("flipped rotation and translation over the xy plane. This is also a solution as long as the chessboard is coplanar with xy plane and z = 0")
-        # translation_x = translation_i * np.array([[1],[1],[-1]])
-        translation_x = translation_i * np.array([1,1,-1])
-        rot_array_x, _ = cv2.Rodrigues(rotation_i)
-
-        print("it is important that the matrix changes are before our old translation matrix. when placed after, i believe this 180 degree rotation around the z axis happens after the translation but about the old axis some distance away, so that the rotatation then also includes some translation. should probably take time to get more clear on this")
-        rot_array_x = np.array([
-                            [-1,0,0],
-                            [0,-1,0],
-                            [0,0,1]
-        ]) @ rot_array_x
-
-        rotation_x, _ = cv2.Rodrigues(rot_array_x)
-
-        rotation_x_i, translation_x_i = self.invert_rot_and_pose(rotation_x, translation_x)
-
-        print(rot_array_x)
-        print(translation_x)
-
         markers = MarkerArray()
 
-        marker = self.create_marker(rot_array, translation, 9000, [1,1,1])
+        object_points = calibrator.get_points()
+
+        for idx, point in enumerate(object_points):
+            marker = self.create_marker2(point, idx+1, [0,0,1])
+            markers.markers.append(marker)
+
+        rows, cols = calibrator.grid_size()
+        camera_points = camera.find_image_points(rows, cols)
+
+        for idx, point in enumerate(camera_points):
+            marker = self.create_marker2(point, idx+3000, [0,1,1])
+            markers.markers.append(marker)
+
+        marker = self.create_marker2([camera.width,camera.height,0], idx+2000, [1,1,0])
         markers.markers.append(marker)
 
-        marker = self.create_marker(rot_array_i, translation_i, 9001, [.5,0,0])
-        markers.markers.append(marker)
+        cv2.drawChessboardCorners(camera.image, (rows, cols), camera_points, True) # last arg should be ret
+        cv2.namedWindow("window_z", cv2.WINDOW_NORMAL) 
+        cv2.imshow('window_z', camera.image)
+        cv2.waitKey(10)
+
+        ret, r_c_w, T_c_w = cv2.solvePnP(object_points, camera_points, camera.intrinsics, camera.distortion)
+        R_c_w, _ = cv2.Rodrigues(r_c_w)
+
+        R_w_c, T_w_c = self.invert_rot_and_pose(R_c_w, T_c_w)
+
+        # if (T_w_c[2] < 0):
+            # translation_x = translation_i * np.array([[1],[1],[-1]])
+        T_w_c_f = T_w_c * np.array([1,1,-1])
+        R_w_c_f = np.array([
+                    [-1,0,0],
+                    [0,-1,0],
+                    [0,0,1]
+                ]) @ R_w_c
         
-        marker = self.create_marker(rot_array_x, translation_x, 9002, [0,0,0])
+        R_c_w_f, T_c_w_f = self.invert_rot_and_pose(R_w_c_f, T_w_c_f)
+
+        r_c_w_f, _ = cv2.Rodrigues(R_c_w_f)
+
+        marker = self.create_marker(R_c_w, T_c_w, 9000, [1,1,1])
         markers.markers.append(marker)
-        
-        for idx, point in enumerate(corners):
-            marker = self.create_marker2([0,0,0], point, idx+3000, [0,1,1])
-            markers.markers.append(marker)
 
-        for idx, point in enumerate(object_corners):
-            marker = self.create_marker2([0,0,0], point, idx+1, [0,0,1])
-            markers.markers.append(marker)
-
-        more = cv2.projectPoints(object_corners, rotation_x_i, translation_x_i, camera_matrix, distorition_matrix2)[0].reshape(-1,2)
-        # more = cv2.projectPoints(object_corners, rotation_x_i, translation_x_i, camera_matrix, distorition_matrix2)[0].reshape(-1,2)
-        for idx, point in enumerate(more):
-            marker = self.create_marker2([0,0,0], point, idx+1000, [1,0,0])
-            markers.markers.append(marker)
-
-        marker = self.create_marker2([0,0,0], [w,h,0], idx+2000, [1,1,0])
+        marker = self.create_marker(R_w_c, T_w_c, 9001, [.5,0,0])
         markers.markers.append(marker)
+
+        reprojection_points = cv2.projectPoints(object_points, r_c_w_f, T_c_w_f, camera.intrinsics, camera.distortion)[0].reshape(-1,2)
+        for idx, point in enumerate(reprojection_points):
+            marker = self.create_marker2(point, idx+1000, [1,0,0])
+            markers.markers.append(marker)
 
         print("publshing")
         self.publisher_marker.publish(markers)
         print("DONE")
 
-        cv2.drawChessboardCorners(image, (row, col), corners, ret)
-        cv2.namedWindow("window_z", cv2.WINDOW_NORMAL) 
-        cv2.imshow('window_z', image)
-        cv2.waitKey(10)
 
+    def listener_callback(self, msg):
+        return 0
 
-    def invert_rot_and_pose(self, rotation, translation):
-        rot_array, _ = cv2.Rodrigues(rotation)
+    def create_chessboard_cube(self, cube_side_len, chessboard_side_len, row, col, transform_from_origin = None):
+        return 0
+    
+    def invert_rot_and_pose(self, rot_array, translation):
         pose_a = np.hstack((rot_array, translation.reshape((-1,1))))
         pose_b = np.vstack((pose_a, [[0, 0, 0, 1]]))
         pose_inv = np.linalg.inv(pose_b)
         rot_t_array = pose_inv[:3,:3]
-        rot_t, _ = cv2.Rodrigues(rot_t_array)
         trans_t = pose_inv[:3,3]
-        return (rot_t, trans_t)
-
-    def listener_callback(self, msg):
-        return 0
-        # pose = self.solver.solve(msg)
-        # marker = self.pose_to_marker(pose)
-        # self.publisher_marker.publish(marker)
-        # self.publisher_pose.publish(pose)
-
-    def object_corners(self, size, row, col):
-        x = np.arange(row)
-        y = np.arange(col)
-        arr = np.meshgrid(x,y)
-        z = arr[0] * 0
-        corners = np.stack((arr[0], arr[1], z), axis=2) * size
-        return corners.reshape((-1,3))
+        return (rot_t_array, trans_t)
 
     def pose_to_marker():
         marker = Marker()
@@ -169,12 +116,6 @@ class CameraCalibrator(Node):
         marker.pose.position.z = float(point[2] / 1000)
 
         quaternion = Rotation.from_matrix(vector).as_quat()      
-        # quaternion = Rotation.align_vectors([[0,0,-1]],[vector])[0].as_quat()  
-        # quaternion = Rotation.align_vectors([vector], [[1,0,0]])[0].as_quat()  
-
-        # print("HERE")
-        # print(vector)
-        # print(quaternion)
 
         marker.pose.orientation.x = float(quaternion[0])
         marker.pose.orientation.y = float(quaternion[1])
@@ -183,7 +124,7 @@ class CameraCalibrator(Node):
 
         return marker
     
-    def create_marker2(self, vector, point, id, color):
+    def create_marker2(self, point, id, color):
         marker = Marker()
         marker.header.frame_id = '/camera_depth_optical_frame'
         marker.header.stamp = self.get_clock().now().to_msg()
@@ -203,72 +144,102 @@ class CameraCalibrator(Node):
         marker.pose.position.y = float(point[1] / 1000)
         marker.pose.position.z = float(0)
 
-        # quaternion = Rotation.from_matrix(vector).as_quat()      
-        quaternion = Rotation.align_vectors([[0,0,1]],[vector])[0].as_quat()  
-
-        # print("HERE")
-        # print(vector)
-        # print(quaternion)
-
-        # marker.pose.orientation.x = float(quaternion[0])
-        # marker.pose.orientation.y = float(quaternion[1])
-        # marker.pose.orientation.z = float(quaternion[2])
-        # marker.pose.orientation.w = float(quaternion[3])
-
         return marker
 
-# class ChessboardRepresentation():
+class CalibratorObject():
 
-#     def __init__(self, full_length):
+    def __init__(self):
+        self.points = self.construct_points_at_origin()
+        self.check_points()
 
-#         self.full_length = full_length
-
-#     def create_points(self):
-
-#         return 0
-
-
-# class PointToPixelSolver():
+    def construct_points_at_origin(self):
+        raise NotImplementedError()
     
-#     def __init__(self, chessboard):
-
-#         self.chessboard = chessboard
-
-#     def solve(self, image, initial_guess):
-
-#         # Ma = b
-#         def function(x):
-#             return 0
-
-#         best_homography = 0
-#         max_inliers = 0
-#         for _ in range(ransac_rounds):
-#             matches = ransac_sample(image)
-#             homography = least_squares(function(matches), initial_guess, method="lm")
-#             inliers = 0
-#             if inliers > max_inliers:
-#                 max_inliers = inliers
-#                 best_homography = homography
-
-#         pose = Pose(best_homography)
-#         return pose
+    def transform_points(self, X_w_p):
+        raise NotImplementedError()
     
-#         # image to grayscale
-#         # grayscale to corner detection (harris corner or opencv implementation)
-#         # solver for 3D chessboard points to 2D (Levenberg Marquardt)
-#             # what about noise of image points? Should Levenberg be done multiple times with RANSAC and use the best one?
-#         # invert solver homography to get camera position wrt world instead of world position wrt camera?
-#         # split homography into a ROS2 pose (a Point position and Quaternion quaternion)
+    def get_points(self):
+        return self.points
     
-#     def ransac_sample(self, points_3d, points_2d, num_samples):
-#         return 0
+    def check_points(self):
+        return True
     
-#     def ransac_sample_2(self, matches, num_samples):
-#         return 0
+    def grid_size(self):
+        return self.rows, self.cols
+    
+    def grid_xy(self, rows, cols, spacing, margin = 0):
+        x = np.arange(rows)
+        y = np.arange(cols)
+        arr = np.meshgrid(x,y)
+        z = arr[0] * 0
+        points = np.stack((arr[0], arr[1], z), axis=2) * spacing + [margin, margin, 0]
+        return points.reshape((-1,3)).astype('float32')
+
+class Chessboard(CalibratorObject):
+
+    def __init__(self, side_length, rows, cols):
+        self.side_length = side_length
+        self.rows = rows
+        self.cols = cols
+        # self.mirror = 'xy'
+        super().__init__()
+
+    def construct_points_at_origin(self):
+        return self.grid_xy(self.rows, self.cols, self.side_length)
+
+class Chesscube(CalibratorObject):
+
+    def __init__(self, cube_length, side_length, rows, cols):
+        self.side_length = side_length
+        self.cube_length = cube_length
+        self.rows = rows
+        self.cols = cols
+        super().__init__()
+
+    def construct_points_at_origin(self):
+        grid = self.grid_xy(self.rows, self.cols, self.side_length)
+        R_xz = np.array([[1,0,0],[0,0,1],[0,1,0]])
+        R_yz = np.array([[0,1,0],[0,0,1],[1,0,0]])
+        return np.concatenate((grid, grid @ R_xz, grid @ R_yz))
+
+class Camera():
+
+    def __init__(self, focal_length, image_path):
+        self.load_image(image_path)
+        self.distortion = np.array([0.,0.,0.,0.,0.])
+        self.intrinsics = np.float64([[focal_length, 0, self.width/2],
+                                      [0, focal_length, self.height/2],
+                                      [0, 0, 1]])
+        
+    def load_image(self, image_path):
+        self.image = cv2.imread(image_path)
+        self.width = self.image.shape[1]
+        self.height = self.image.shape[0]
+
+    def find_image_points(self, row, col):
+        ret, corners = cv2.findChessboardCorners(self.image, (row, col), None)
+        if (ret): return corners.reshape((-1,2))
+        ret, corners = cv2.findChessboardCornersSB(self.image, (row, col), None)
+        if (ret): return corners.reshape((-1,2))
+        raise Exception("Neither method could find the chessboard corners") 
+
+    def find_object_in_image(self, object, mask = None):
+        return 0
+
+    def project_object_to_image(self, object, camera_translation, camera_rotation):
+        return 0
+    
+    def check_valid_object(self, object):
+        return True
+    
 
 def main(args=None):
     rclpy.init(args=args)
-    minimal_subscriber = CameraCalibrator(10)
+
+    camera = Camera(382.77, 'chessboard_top.png')
+    calibrator = Chessboard(10, 6, 7)
+
+    minimal_subscriber = CameraCalibrator(camera, calibrator)
     rclpy.spin(minimal_subscriber)
     minimal_subscriber.destroy_node()
     cv2.destroyAllWindows()
