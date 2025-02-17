@@ -35,49 +35,54 @@ class CameraCalibrator(Node):
             print(i)
             print("______________________")
 
-        # rows, cols = calibrator.grid_size()
-        # camera_points = camera.find_image_points(rows, cols)
+        rows, cols = calibrator.grid_size()
+        camera_points = camera.find_image_points(rows, cols)
+        masks = []
+        masks.append(cv2.fillPoly(camera.image, pts=[], color=(255,255,255)))
+        masks.append(cv2.fillPoly(camera.image, pts=[], color=(255,255,255)))
+        masks.append(cv2.fillPoly(camera.image, pts=[], color=(255,255,255)))
+        camera_points = camera.find_cube_points(rows, cols, masks)
 
-        # for idx, point in enumerate(camera_points):
-        #     marker = self.create_marker2(point, idx+3000, [0,1,1])
-        #     markers.markers.append(marker)
+        for idx, point in enumerate(camera_points):
+            marker = self.create_marker2(point, idx+3000, [0,1,1])
+            markers.markers.append(marker)
 
-        # marker = self.create_marker2([camera.width,camera.height,0], idx+2000, [1,1,0])
-        # markers.markers.append(marker)
+        marker = self.create_marker2([camera.width,camera.height,0], idx+2000, [1,1,0])
+        markers.markers.append(marker)
 
-        # cv2.drawChessboardCorners(camera.image, (rows, cols), camera_points, True) # last arg should be ret
-        # cv2.namedWindow("window_z", cv2.WINDOW_NORMAL) 
-        # cv2.imshow('window_z', camera.image)
-        # cv2.waitKey(10)
+        cv2.drawChessboardCorners(camera.image, (rows, cols), camera_points, True) # last arg should be ret
+        cv2.namedWindow("window_z", cv2.WINDOW_NORMAL) 
+        cv2.imshow('window_z', camera.image)
+        cv2.waitKey(10)
 
-        # ret, r_c_w, T_c_w = cv2.solvePnP(object_points, camera_points, camera.intrinsics, camera.distortion)
-        # R_c_w, _ = cv2.Rodrigues(r_c_w)
+        ret, r_c_w, T_c_w = cv2.solvePnP(object_points, camera_points, camera.intrinsics, camera.distortion)
+        R_c_w, _ = cv2.Rodrigues(r_c_w)
 
-        # R_w_c, T_w_c = self.invert_rot_and_pose(R_c_w, T_c_w)
+        R_w_c, T_w_c = self.invert_rot_and_pose(R_c_w, T_c_w)
 
-        # # if (T_w_c[2] < 0):
-        #     # translation_x = translation_i * np.array([[1],[1],[-1]])
-        # T_w_c_f = T_w_c * np.array([1,1,-1])
-        # R_w_c_f = np.array([
-        #             [-1,0,0],
-        #             [0,-1,0],
-        #             [0,0,1]
-        #         ]) @ R_w_c
+        # if (T_w_c[2] < 0):
+            # translation_x = translation_i * np.array([[1],[1],[-1]])
+        T_w_c_f = T_w_c * np.array([1,1,-1])
+        R_w_c_f = np.array([
+                    [-1,0,0],
+                    [0,-1,0],
+                    [0,0,1]
+                ]) @ R_w_c
         
-        # R_c_w_f, T_c_w_f = self.invert_rot_and_pose(R_w_c_f, T_w_c_f)
+        R_c_w_f, T_c_w_f = self.invert_rot_and_pose(R_w_c_f, T_w_c_f)
 
-        # r_c_w_f, _ = cv2.Rodrigues(R_c_w_f)
+        r_c_w_f, _ = cv2.Rodrigues(R_c_w_f)
 
-        # marker = self.create_marker(R_c_w, T_c_w, 9000, [1,1,1])
-        # markers.markers.append(marker)
+        marker = self.create_marker(R_c_w, T_c_w, 9000, [1,1,1])
+        markers.markers.append(marker)
 
-        # marker = self.create_marker(R_w_c, T_w_c, 9001, [.5,0,0])
-        # markers.markers.append(marker)
+        marker = self.create_marker(R_w_c, T_w_c, 9001, [.5,0,0])
+        markers.markers.append(marker)
 
-        # reprojection_points = cv2.projectPoints(object_points, r_c_w_f, T_c_w_f, camera.intrinsics, camera.distortion)[0].reshape(-1,2)
-        # for idx, point in enumerate(reprojection_points):
-        #     marker = self.create_marker2(point, idx+1000, [1,0,0])
-        #     markers.markers.append(marker)
+        reprojection_points = cv2.projectPoints(object_points, r_c_w_f, T_c_w_f, camera.intrinsics, camera.distortion)[0].reshape(-1,2)
+        for idx, point in enumerate(reprojection_points):
+            marker = self.create_marker2(point, idx+1000, [1,0,0])
+            markers.markers.append(marker)
 
         print("publshing")
         self.publisher_marker.publish(markers)
@@ -225,7 +230,15 @@ class Camera():
         if (ret): return corners.reshape((-1,2))
         ret, corners = cv2.findChessboardCornersSB(self.image, (row, col), None)
         if (ret): return corners.reshape((-1,2))
-        raise Exception("Neither method could find the chessboard corners") 
+        raise Exception("Neither method could find the chessboard corners")
+    
+    def find_cube_points(self, row, col, masks):
+        all_points = []
+        for mask in masks:
+            partial = cv2.bitwise_and(self.image, self.image, mask)
+            points = self.find_image_points(partial, row, col)
+            all_points.append(points)
+        return all_points
 
     def find_object_in_image(self, object, mask = None):
         return 0
