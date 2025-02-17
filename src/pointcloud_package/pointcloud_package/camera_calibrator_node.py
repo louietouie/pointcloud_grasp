@@ -240,7 +240,7 @@ class Camera():
             all_points.append(points)
         return all_points
 
-    def find_object_in_image(self, object, mask = None):
+    def solve_object_in_image(self, object, mask = None):
         return 0
 
     def project_object_to_image(self, object, camera_translation, camera_rotation):
