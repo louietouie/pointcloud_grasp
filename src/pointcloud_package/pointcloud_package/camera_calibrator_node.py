@@ -25,52 +25,59 @@ class CameraCalibrator(Node):
         object_points = calibrator.get_points()
 
         for idx, point in enumerate(object_points):
+            print(point)
             marker = self.create_marker2(point, idx+1, [0,0,1])
             markers.markers.append(marker)
 
-        rows, cols = calibrator.grid_size()
-        camera_points = camera.find_image_points(rows, cols)
+        print(len(markers.markers))
+        for idx, i in enumerate(markers.markers):
+            print(idx)
+            print(i)
+            print("______________________")
 
-        for idx, point in enumerate(camera_points):
-            marker = self.create_marker2(point, idx+3000, [0,1,1])
-            markers.markers.append(marker)
+        # rows, cols = calibrator.grid_size()
+        # camera_points = camera.find_image_points(rows, cols)
 
-        marker = self.create_marker2([camera.width,camera.height,0], idx+2000, [1,1,0])
-        markers.markers.append(marker)
+        # for idx, point in enumerate(camera_points):
+        #     marker = self.create_marker2(point, idx+3000, [0,1,1])
+        #     markers.markers.append(marker)
 
-        cv2.drawChessboardCorners(camera.image, (rows, cols), camera_points, True) # last arg should be ret
-        cv2.namedWindow("window_z", cv2.WINDOW_NORMAL) 
-        cv2.imshow('window_z', camera.image)
-        cv2.waitKey(10)
+        # marker = self.create_marker2([camera.width,camera.height,0], idx+2000, [1,1,0])
+        # markers.markers.append(marker)
 
-        ret, r_c_w, T_c_w = cv2.solvePnP(object_points, camera_points, camera.intrinsics, camera.distortion)
-        R_c_w, _ = cv2.Rodrigues(r_c_w)
+        # cv2.drawChessboardCorners(camera.image, (rows, cols), camera_points, True) # last arg should be ret
+        # cv2.namedWindow("window_z", cv2.WINDOW_NORMAL) 
+        # cv2.imshow('window_z', camera.image)
+        # cv2.waitKey(10)
 
-        R_w_c, T_w_c = self.invert_rot_and_pose(R_c_w, T_c_w)
+        # ret, r_c_w, T_c_w = cv2.solvePnP(object_points, camera_points, camera.intrinsics, camera.distortion)
+        # R_c_w, _ = cv2.Rodrigues(r_c_w)
 
-        # if (T_w_c[2] < 0):
-            # translation_x = translation_i * np.array([[1],[1],[-1]])
-        T_w_c_f = T_w_c * np.array([1,1,-1])
-        R_w_c_f = np.array([
-                    [-1,0,0],
-                    [0,-1,0],
-                    [0,0,1]
-                ]) @ R_w_c
+        # R_w_c, T_w_c = self.invert_rot_and_pose(R_c_w, T_c_w)
+
+        # # if (T_w_c[2] < 0):
+        #     # translation_x = translation_i * np.array([[1],[1],[-1]])
+        # T_w_c_f = T_w_c * np.array([1,1,-1])
+        # R_w_c_f = np.array([
+        #             [-1,0,0],
+        #             [0,-1,0],
+        #             [0,0,1]
+        #         ]) @ R_w_c
         
-        R_c_w_f, T_c_w_f = self.invert_rot_and_pose(R_w_c_f, T_w_c_f)
+        # R_c_w_f, T_c_w_f = self.invert_rot_and_pose(R_w_c_f, T_w_c_f)
 
-        r_c_w_f, _ = cv2.Rodrigues(R_c_w_f)
+        # r_c_w_f, _ = cv2.Rodrigues(R_c_w_f)
 
-        marker = self.create_marker(R_c_w, T_c_w, 9000, [1,1,1])
-        markers.markers.append(marker)
+        # marker = self.create_marker(R_c_w, T_c_w, 9000, [1,1,1])
+        # markers.markers.append(marker)
 
-        marker = self.create_marker(R_w_c, T_w_c, 9001, [.5,0,0])
-        markers.markers.append(marker)
+        # marker = self.create_marker(R_w_c, T_w_c, 9001, [.5,0,0])
+        # markers.markers.append(marker)
 
-        reprojection_points = cv2.projectPoints(object_points, r_c_w_f, T_c_w_f, camera.intrinsics, camera.distortion)[0].reshape(-1,2)
-        for idx, point in enumerate(reprojection_points):
-            marker = self.create_marker2(point, idx+1000, [1,0,0])
-            markers.markers.append(marker)
+        # reprojection_points = cv2.projectPoints(object_points, r_c_w_f, T_c_w_f, camera.intrinsics, camera.distortion)[0].reshape(-1,2)
+        # for idx, point in enumerate(reprojection_points):
+        #     marker = self.create_marker2(point, idx+1000, [1,0,0])
+        #     markers.markers.append(marker)
 
         print("publshing")
         self.publisher_marker.publish(markers)
@@ -78,9 +85,6 @@ class CameraCalibrator(Node):
 
 
     def listener_callback(self, msg):
-        return 0
-
-    def create_chessboard_cube(self, cube_side_len, chessboard_side_len, row, col, transform_from_origin = None):
         return 0
     
     def invert_rot_and_pose(self, rot_array, translation):
@@ -90,10 +94,6 @@ class CameraCalibrator(Node):
         rot_t_array = pose_inv[:3,:3]
         trans_t = pose_inv[:3,3]
         return (rot_t_array, trans_t)
-
-    def pose_to_marker():
-        marker = Marker()
-        return marker
     
     def create_marker(self, vector, point, id, color):
         marker = Marker()
@@ -140,9 +140,13 @@ class CameraCalibrator(Node):
         marker.color.b = float(color[2])
         marker.color.a = 1.0
 
+        print('m' + str(id))
+        print(point)
+
         marker.pose.position.x = float(point[0] / 1000)
         marker.pose.position.y = float(point[1] / 1000)
-        marker.pose.position.z = float(0)
+        z = float(point[2]/1000) if point[2] else 0.
+        marker.pose.position.z = z
 
         return marker
 
@@ -189,15 +193,15 @@ class Chessboard(CalibratorObject):
 
 class Chesscube(CalibratorObject):
 
-    def __init__(self, cube_length, side_length, rows, cols):
+    def __init__(self, side_length, margin, rows, cols):
         self.side_length = side_length
-        self.cube_length = cube_length
+        self.margin = margin
         self.rows = rows
         self.cols = cols
         super().__init__()
 
     def construct_points_at_origin(self):
-        grid = self.grid_xy(self.rows, self.cols, self.side_length)
+        grid = self.grid_xy(self.rows, self.cols, self.side_length, self.margin)
         R_xz = np.array([[1,0,0],[0,0,1],[0,1,0]])
         R_yz = np.array([[0,1,0],[0,0,1],[1,0,0]])
         return np.concatenate((grid, grid @ R_xz, grid @ R_yz))
@@ -237,7 +241,8 @@ def main(args=None):
     rclpy.init(args=args)
 
     camera = Camera(382.77, 'chessboard_top.png')
-    calibrator = Chessboard(10, 6, 7)
+    # calibrator = Chessboard(10, 6, 7)
+    calibrator = Chesscube(20, 30, 6, 6)
 
     minimal_subscriber = CameraCalibrator(camera, calibrator)
     rclpy.spin(minimal_subscriber)
