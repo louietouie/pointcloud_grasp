@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import Pose # Transform
+from geometry_msgs.msg import PoseStamped # Transform
 from visualization_msgs.msg import Marker, MarkerArray
 
 from scipy.optimize import least_squares
@@ -17,8 +17,8 @@ class CameraCalibrator(Node):
         super().__init__('camera_calibrator')
 
         self.subscription = self.create_subscription(Image, '/camera/camera/depth/image_rect_raw', self.listener_callback, 10)
-        self.publisher_marker = self.create_publisher(MarkerArray, 'camera_icon', 10)
-        self.publisher_pose = self.create_publisher(Pose, 'camera_pose', 10)
+        self.publisher_marker = self.create_publisher(MarkerArray, 'camera_scene', 10)
+        self.publisher_pose = self.create_publisher(PoseStamped, 'camera_pose', 10)
 
         markers = MarkerArray()
 
@@ -75,6 +75,8 @@ class CameraCalibrator(Node):
         marker = self.create_marker(T_w_c_f, 9002, scale=[0.02, 0.002, 0.002], mtype='a', R=R_c_w_f, color=[0,0,0])
         markers.markers.append(marker)
 
+        pose = self.create_pose(T_w_c_f, R_c_w_f)
+
         reprojection_points = cv2.projectPoints(object_points, r_c_w_f, T_c_w_f, camera.intrinsics, camera.distortion)[0].reshape(-1,2)
         for idx, point in enumerate(reprojection_points):
             marker = self.create_marker(point, idx+1000, color=[1,0,0])
@@ -82,6 +84,7 @@ class CameraCalibrator(Node):
 
         print("publshing")
         self.publisher_marker.publish(markers)
+        self.publisher_pose.publish(pose)
         print("DONE")
 
     def listener_callback(self, msg):
@@ -130,6 +133,24 @@ class CameraCalibrator(Node):
             marker.pose.orientation.w = float(quaternion[3])
 
         return marker
+    
+    def create_pose(self, point, R):
+        pose = PoseStamped()
+        pose.header.frame_id = '/camera_depth_optical_frame'
+        pose.header.stamp = self.get_clock().now().to_msg()
+
+        pose.pose.position.x = float(point[0] / 1000)
+        pose.pose.position.y = float(point[1] / 1000)
+        pose.pose.position.z = float(point[2]/1000)
+
+        quaternion = Rotation.from_matrix(R).as_quat()
+        pose.pose.orientation.x = float(quaternion[0])
+        pose.pose.orientation.y = float(quaternion[1])
+        pose.pose.orientation.z = float(quaternion[2])
+        pose.pose.orientation.w = float(quaternion[3])
+
+        return pose
+
 
 class CalibratorObject():
 
@@ -229,7 +250,7 @@ class Camera():
 def main(args=None):
     rclpy.init(args=args)
 
-    camera = Camera(382.77, 'images/chessboard_high2.png')
+    camera = Camera(382.77, 'images/chessboard_top.png')
     calibrator = Chessboard(10, 6, 7)
     # calibrator = Chesscube(20, 30, 6, 6)
 
