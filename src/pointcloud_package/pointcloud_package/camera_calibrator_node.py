@@ -11,8 +11,6 @@ from scipy.spatial.transform import Rotation
 import cv2
 import numpy as np
 
-import pyrealsense2 as rs
-
 class CameraCalibrator(Node):
     
     def __init__(self, camera, calibrator):
