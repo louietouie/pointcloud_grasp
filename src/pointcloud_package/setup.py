@@ -1,4 +1,4 @@
-from setuptools import find_packages, setup
+from setuptools import find_packages, setup, Extension
 from glob import glob
 import os
 
@@ -8,7 +8,7 @@ package_name = 'pointcloud_package'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=find_packages(exclude=['test']),
+    packages=find_packages(include=['pyrealsense2','pyrealsense2.*'], exclude=['test']),
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -28,4 +28,7 @@ setup(
             'camera_calibrator_node = pointcloud_package.camera_calibrator_node:main'
         ],
     },
+    # ext_modules=[Extension(...,
+    #     library_dirs=['/usr/local/lib'],
+    #     libraries=['librealsense2.so.2.55.1'])],
 )

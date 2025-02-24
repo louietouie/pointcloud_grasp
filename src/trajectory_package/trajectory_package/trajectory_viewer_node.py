@@ -1,3 +1,5 @@
+import pyrealsense2 as rs
+
 def main():
     print('Hi from trajectory_package.')
 
